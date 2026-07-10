@@ -16,10 +16,10 @@ st.set_page_config(
 st.markdown("""
     <style>
     .stApp { background-color: #0A0D14; color: #E2E8F0; }
-
+    
     /* Títulos y textos destacados en flúor */
     h1, h2, h3, .stMarkdown strong { color: #deff9a !important; }
-
+    
     /* Botón principal flúor estilo Cyberpunk */
     .stButton>button { 
         width: 100%; 
@@ -34,7 +34,7 @@ st.markdown("""
     .stButton>button:hover {
         transform: scale(1.02);
     }
-
+    
     /* Tarjeta lateral de anuncios */
     .ad-card {
         background-color: #121620;
@@ -47,8 +47,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Dirección de tu Servidor de IA en Hugging Face (Modifica con tu subdominio real)
-# Debe terminar exactamente en ".hf.space/procesar"
+# 3. Dirección de tu Servidor de IA en Hugging Face
+# Asegúrate de que entre las comillas esté TU enlace directo terminando en /procesar
 BACKEND_API_URL = "https://vzex-zexiastudio.hf.space/procesar"
 
 # --- LOGIN SIMULADO PARA SEPARAR SESIONES ---
@@ -60,7 +60,7 @@ if not st.session_state.user_logged:
     st.subheader("🔑 Acceso al Panel SaaS")
     email = st.text_input("Correo electrónico del suscriptor")
     password = st.text_input("Contraseña", type="password")
-
+    
     if st.button("Inicializar Nodo Cloud"):
         if email and len(password) >= 6:
             st.session_state.user_logged = email
@@ -71,8 +71,7 @@ if not st.session_state.user_logged:
 
 # --- INSTANCIA ACTIVA: INTERFAZ PRINCIPAL ---
 st.title("🚀 ZexOS AI Studio Core — Cloud SaaS Engine")
-st.caption(
-    "Cargue bruto audiovisual. El sistema ejecutará el tracking predictivo, elipsis de silencios y normalización en servidores remotos.")
+st.caption("Cargue bruto audiovisual. El sistema ejecutará el tracking predictivo, elipsis de silencios y normalización en servidores remotos.")
 
 # --- BARRA LATERAL (Sidebar) + CONFIGURACIÓN + ANUNCIOS ---
 st.sidebar.markdown(f"**Usuario:** `{st.session_state.user_logged}`")
@@ -107,8 +106,7 @@ st.sidebar.html(html_anuncio)
 
 # --- CUERPO PRINCIPAL: SUBIDA Y CONTROL DE SEGURIDAD ---
 st.markdown("---")
-st.warning(
-    "⚠️ **Restricción de la capa Free:** Máximo **60 segundos** por video para evitar saturación o cortes por tiempo de espera (Timeout) en la nube.")
+st.warning("⚠️ **Restricción de la capa Free:** Máximo **60 segundos** por video para evitar saturación o cortes por tiempo de espera (Timeout) en la nube.")
 
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
 
@@ -117,39 +115,36 @@ if video_subido:
     path_temporal = "validando_duracion.mp4"
     with open(path_temporal, "wb") as f:
         f.write(video_subido.getvalue())
-
+        
     try:
         # Abrimos el video con MoviePy para leer la duración real
         clip_prueba = VideoFileClip(path_temporal)
         duracion_real = clip_prueba.duration
         clip_prueba.close()
-
+        
         # Eliminamos el temporal inmediatamente del disco duro
         if os.path.exists(path_temporal):
             os.remove(path_temporal)
-
+            
         st.write(f"⏱️ Duración del archivo cargado: `{duracion_real:.2f} segundos`")
-
+        
         # 🛡️ FILTRO ESTRICTO ANTICRISIS DE SERVIDOR
         if duracion_real > 60.0:
-            st.error(
-                f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de 60 segundos de la cuenta gratuita.")
-            st.info(
-                "💡 **¿Necesitas procesar videos de hasta 2 horas?** Actualiza tu suscripción al Plan Pro ilimitado mediante Lemon Squeezy.")
+            st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de 60 segundos de la cuenta gratuita.")
+            st.info("💡 **¿Necesitas procesar videos de hasta 2 horas?** Actualiza tu suscripción al Plan Pro ilimitado mediante Lemon Squeezy.")
         else:
-            st.success(
-                "✅ Metraje verificado con éxito. El tamaño se encuentra dentro del rango óptimo para los servidores de IA.")
-
+            st.success("✅ Metraje verificado con éxito. El tamaño se encuentra dentro del rango óptimo para los servidores de IA.")
+            
             # Columnas para organizar el espacio visual
             col_preview, col_render = st.columns([1, 1])
-
+            
             with col_preview:
                 st.subheader("Source Input Preview")
                 st.video(video_subido)
-
+                
             with col_render:
                 st.subheader("Orquestación del Render Cloud")
-
+                
                 if st.button("EJECUTAR COMPILACIÓN MULTIMODAL AUTOMÁTICA"):
                     with st.spinner("Inicializando Workers de GPU remotos y procesando timestamps con Whisper..."):
                         try:
@@ -161,23 +156,23 @@ if video_subido:
                                 "formato": formato_seleccionado,
                                 "con_subtitulos": str(con_subtitulos).lower()
                             }
-
+                            
                             # Hacemos la llamada HTTP POST hacia Hugging Face
                             respuesta = requests.post(
-                                BACKEND_API_URL,
-                                files=archivos_envio,
-                                data=datos_formulario,
+                                BACKEND_API_URL, 
+                                files=archivos_envio, 
+                                data=datos_formulario, 
                                 timeout=600  # 10 minutos máximos de espera en red
                             )
-
+                            
                             if respuesta.status_code == 200:
                                 st.balloons()
                                 st.success("¡Pipeline ejecutado correctamente por la infraestructura de IA!")
-
+                                
                                 # Mostramos el video procesado devuelto por la API
                                 st.subheader("Resultado Final Distribuible")
                                 st.video(respuesta.content)
-
+                                
                                 st.download_button(
                                     label="📥 Descargar Máster MP4",
                                     data=respuesta.content,
@@ -186,12 +181,11 @@ if video_subido:
                                 )
                             else:
                                 st.error(f"Fallo crítico en el clúster de renderizado: {respuesta.text}")
-
+                                
                         except Exception as error_red:
                             st.error(f"Error de enlace de red con los servidores de Hugging Face: {str(error_red)}")
-                            st.info(
-                                "Asegúrate de que tu espacio en Hugging Face haya terminado de compilar y esté en estado 'Running'.")
-
+                            st.info("Asegúrate de que tu espacio en Hugging Face haya terminado de compilar y esté en estado 'Running'.")
+                            
     except Exception as e:
         st.error(f"Error al analizar la estructura multimedia del archivo: {str(e)}")
         if os.path.exists(path_temporal):
