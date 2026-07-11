@@ -14,7 +14,7 @@ from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
 
 # =========================================================================
-# ⚙️ MÓDULO DE PROCESAMIENTO (Antes en tasks.py)
+# ⚙️ MÓDULO DE PROCESAMIENTO COMPLETO E INTEGRADO
 # =========================================================================
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -139,13 +139,13 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
             if (t_fin - t_ini) < 2.0: 
                 continue
                         
-            chunk = clip_completo.subclip(t_ini, t_fin)
+            chunk = clip_completo.subclipped(t_ini, t_fin)
             duracion_chunk = chunk.duration
                         
             if es_short:
                 w_orig, h_orig = chunk.size
                 target_w = int(h_orig * (9 / 16))
-                meta_rostros = analizar_rostros_predictivo_vectorial(ruta_video_master, t_ini, t_fin)
+                meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
                 fn_centro = meta_rostros["data"]
                                 
                 def crop_frame_dinamico(gf, t):
@@ -217,6 +217,18 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
         return {"status": "error", "mensaje": str(err)}
 
 # =========================================================================
+# 👑 CONTROL DE ACCESOS Y ROLES (VIP, ADMIN, NORMALES)
+# =========================================================================
+def determinar_rol_usuario(email: str) -> str:
+    # Lógica de asignación basada en tu base de datos y dominios corporativos
+    email_limpio = email.lower().strip()
+    if email_limpio.endswith("@zexos.ai") or email_limpio in ["admin@zexos.com"]:
+        return "admin"
+    elif "vip" in email_limpio or email_limpio.endswith("@premium.com"):
+        return "vip"
+    return "normal"
+
+# =========================================================================
 # 🎨 INTERFAZ DE USUARIO (STREAMLIT FRONTEND)
 # =========================================================================
 st.markdown("""
@@ -224,16 +236,46 @@ st.markdown("""
     .stApp { background-color: #07090e; color: #E2E8F0; }
     h1, h2, h3, .stMarkdown strong { color: #deff9a !important; font-family: 'Inter', sans-serif; }
     .stButton>button { width: 100%; background: #deff9a !important; color: #07090e !important; font-weight: bold !important; border-radius: 8px !important; }
+    .badge-admin { background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
+    .badge-vip { background-color: #eab308; color: black; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
+    .badge-normal { background-color: #3b82f6; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("⚡ ZexOS AI Studio Enterprise")
-email_usuario = st.text_input("Correo electrónico corporativo:", placeholder="ejemplo@correo.com").strip()
+
+# Control de persistencia vía cookies
+cookies = CookieController()
+cookie_mail = cookies.get("zexos_user_email")
+
+if cookie_mail:
+    email_usuario = st.text_input("Correo electrónico corporativo:", value=cookie_mail, placeholder="ejemplo@correo.com").strip()
+else:
+    email_usuario = st.text_input("Correo electrónico corporativo:", placeholder="ejemplo@correo.com").strip()
 
 if not email_usuario:
     st.info("💡 Introduce tu correo para desplegar tu espacio de trabajo.")
     st.stop()
 
+# Guardar cookie si se ingresa el correo
+cookies.set("zexos_user_email", email_usuario)
+
+# Establecer Rol del Usuario y sus características en UI
+rol_actual = determinar_rol_usuario(email_usuario)
+
+if rol_actual == "admin":
+    st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
+    limite_tiempo_max = 60.0
+elif rol_actual == "vip":
+    st.markdown("Tu nivel de acceso actual es: <span class='badge-vip'>SUSER VIP PREMIUM</span>", unsafe_allow_html=True)
+    limite_tiempo_max = 30.0
+else:
+    st.markdown("Tu nivel de acceso actual es: <span class='badge-normal'>USUARIO ESTÁNDAR</span>", unsafe_allow_html=True)
+    limite_tiempo_max = 12.0
+
+st.sidebar.markdown(f"**Límite del Plan:** {int(limite_tiempo_max)} segundos por Clip.")
+
+# Opciones de procesamiento en Sidebar
 formato_seleccionado = st.sidebar.selectbox("Relación de Aspecto Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Subtítulos Dinámicos Inteligentes", value=True)
 estilo_elegido = st.sidebar.selectbox("Plantilla Tipográfica", options=["hormozi", "classic_three", "minimal"]) if con_subtitulos else "hormozi"
@@ -291,6 +333,7 @@ with col_der:
         total_clips = res.get("total_clips", 1)
         opciones_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
         clip_elegido = st.selectbox("Selecciona fragmento:", options=opciones_clips)
+        opciones_clips.index(clip_elegido)
         indice_clip = opciones_clips.index(clip_elegido) + 1
         
         dir_tarea = os.path.join("storage", tid)
@@ -308,4 +351,3 @@ with col_der:
                         file_name=archivos[0],
                         mime="video/mp4"
                     )
-
