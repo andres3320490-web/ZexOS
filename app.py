@@ -8,21 +8,72 @@ from supabase import create_client, Client
 st.set_page_config(
     page_title="ZexOS AI Studio Enterprise",
     page_icon="⚡",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Configuración de base de datos segura integrada
+# Conexión Segura al clúster de Base de Datos
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# --- INYECCIÓN DE INTERFAZ HORIZONTAL PREMIUM (CSS GRID / FLEXBOX) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0A0D14; color: #E2E8F0; }
-    h1, h2, h3, .stMarkdown strong { color: #deff9a !important; }
+    .stApp { background-color: #07090e; color: #E2E8F0; }
+    h1, h2, h3, .stMarkdown strong { color: #deff9a !important; font-family: 'Inter', sans-serif; }
+    
+    /* Contenedor de Tarjetas de Progreso de la IA */
+    .clip-card {
+        background: #111625;
+        border: 1px solid #1e293b;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.3s ease;
+    }
+    .clip-card.locked {
+        border-left: 4px solid #ef4444;
+        opacity: 0.5;
+    }
+    .clip-card.processing {
+        border-left: 4px solid #3b82f6;
+        animation: pulseBorder 1.5s infinite;
+    }
+    .clip-card.unlocked {
+        border-left: 4px solid #deff9a;
+        background: #16222f;
+    }
+    
+    /* Animación del Skeleton Loader Comercial */
+    @keyframes pulseBorder {
+        0% { border-color: #1e293b; }
+        50% { border-color: #3b82f6; }
+        100% { border-color: #1e293b; }
+    }
+    .skeleton-loader {
+        width: 100%;
+        height: 10px;
+        background: linear-gradient(90deg, #111625 25%, #222d44 50%, #111625 75%);
+        background-size: 200% 100%;
+        animation: loadingSkeleton 1.5s infinite;
+        border-radius: 6px;
+        margin-top: 6px;
+        margin-bottom: 15px;
+    }
+    @keyframes loadingSkeleton {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+    
+    /* Botones de Acción Estilo Neon SaaS */
     .stButton>button { 
-        width: 100%; background-color: #deff9a !important; color: #0A0D14 !important; 
+        width: 100%; background: #deff9a !important; color: #07090e !important; 
         font-weight: bold !important; border-radius: 8px !important; border: none !important;
+        box-shadow: 0 4px 14px rgba(222, 255, 154, 0.15);
     }
     .pro-box {
         background-color: #121620; border: 2px dashed #deff9a; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px;
@@ -32,16 +83,17 @@ st.markdown("""
 
 BACKEND_BASE_URL = "https://vzex-zexiastudio.hf.space"
 
-st.title("🚀 ZexOS AI Studio Core (v110% Pro)")
+st.title("⚡ ZexOS AI Studio Enterprise")
 
-# --- ACCESO DE USUARIO ---
-st.subheader("📥 Identificación de Usuario")
-email_usuario = st.text_input("Introduce tu correo electrónico para iniciar el entorno:", placeholder="ejemplo@correo.com o Clave Admin").strip()
+# --- CONTROL DE ACCESO E IDENTIFICACIÓN ---
+st.subheader("📥 Identificación de Entorno")
+email_usuario = st.text_input("Correo electrónico corporativo / Clave Acceso:", placeholder="ejemplo@correo.com").strip()
 
 if not email_usuario:
-    st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
+    st.info("💡 Introduce tus credenciales en la caja superior para desplegar tu espacio de trabajo horizontal.")
     st.stop()
 
+# Lógica dinámica de permisos y rangos
 es_premium_o_vip = False
 es_admin = False
 rango_usuario = "Gratuito"
@@ -63,17 +115,17 @@ try:
                     rango_usuario = "VIP 💎"
                     break
 except Exception as e:
-    st.warning(f"Aviso de Red Supabase: {str(e)}")
+    st.warning(f"Conexión Supabase Bypass (Offline Mode): {str(e)}")
 
-# --- SIDEBAR MONETIZACIÓN & PARÁMETROS ---
-st.sidebar.markdown(f"**Usuario:** `{email_usuario}`")
-st.sidebar.markdown(f"**Rango:** `{rango_usuario}`")
+# --- CONFIGURACIÓN EN BARRA LATERAL (SIDEBAR DASHBOARD STYLE) ---
+st.sidebar.markdown(f"### 👤 Perfil: `{email_usuario}`")
+st.sidebar.markdown(f"**Rango Actual:** {rango_usuario}")
 st.sidebar.markdown("---")
 
 if not es_premium_o_vip:
-    st.sidebar.markdown('<div class="pro-box"><span style="font-size: 18px;">💎 <b>PLAN PRO SAAS</b></span><br><span style="color: #deff9a; font-size: 22px; font-weight: bold;">$10.00 / mes</span></div>', unsafe_allow_html=True)
+    st.sidebar.markdown('<div class="pro-box"><span style="font-size: 14px;">💎 <b>UPGRADE A VIP RENDER</b></span><br><span style="color: #deff9a; font-size: 20px; font-weight: bold;">$10.00 / mes</span></div>', unsafe_allow_html=True)
     paypal_html_btn = f"""
-    <div style="display: flex; justify-content: center; margin-top: 10px;">
+    <div style="display: flex; justify-content: center; margin-top: 5px;">
         <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_blank">
             <input type="hidden" name="cmd" value="_xclick">
             <input type="hidden" name="business" value="andres3320490@gmail.com">
@@ -87,105 +139,143 @@ if not es_premium_o_vip:
     st.sidebar.html(paypal_html_btn)
     st.sidebar.markdown("---")
 
-st.sidebar.subheader("Engine Render Specs")
-formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
-con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
-estilo_elegido = st.sidebar.selectbox("Estilo de Subtítulos", options=["hormozi", "classic_three", "minimal"]) if con_subtitulos else "hormozi"
+st.sidebar.subheader("🎛️ Configuración de Renderizado")
+formato_seleccionado = st.sidebar.selectbox("Relación de Aspecto Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
+con_subtitulos = st.sidebar.checkbox("Subtítulos Dinámicos Inteligentes", value=True)
+estilo_elegido = st.sidebar.selectbox("Plantilla Tipográfica", options=["hormozi", "classic_three", "minimal"]) if con_subtitulos else "hormozi"
 
-# --- CORE CARGA Y PREVISUALIZACIÓN ---
-st.subheader("🎬 Carga de Material Audiovisual")
-url_remoto = st.text_input("🔗 Pegar Enlace directo (YouTube, Twitch VOD, Shorts o Reels):", placeholder="https://www.youtube.com/watch?v=...").strip()
-video_subido = st.file_uploader("📥 O arrastra un archivo local si lo prefieres:", type=["mp4", "mkv", "mov"])
+st.sidebar.markdown("---")
+st.sidebar.subheader("✍️ Filtros de Transcripción Manual")
+diccionario_manual = st.sidebar.text_area("Ganchos prioritarios (separados por comas):", placeholder="VTuber, épico, brutal, reaccion", height=80)
 
-if video_subido or url_remoto:
-    st.success("🎥 Origen multimedia detectado correctamente.")
-    col_prev, col_editor = st.columns([1, 1])
+# --- ARQUITECTURA DE TRABAJO HORIZONTAL (DASHBOARD) ---
+col_izquierda, col_derecha = st.columns([1, 1], gap="large")
+
+with col_izquierda:
+    st.subheader("📥 Carga de Material Audiovisual")
+    url_remoto = st.text_input("🔗 Enlace Directo (YouTube, Twitch VOD, Reels, TikTok):", placeholder="https://www.youtube.com/watch?v=...").strip()
     
-    with col_prev:
-        st.subheader("📺 Previsualización del Vídeo Original")
-        if video_subido:
-            st.video(video_subido)
-        elif url_remoto:
-            st.video(url_remoto)
-            
-    with col_editor:
-        st.subheader("✍️ Editor de Transcripción Manual (Guía de Modulación)")
-        diccionario_manual = st.text_area("Ganchos / Correcciones prioritarias:", placeholder="ejemplo: VTuber, ZexOS, clips, épico, brutal", height=100)
+    # ---- ASIGNACIÓN DINÁMICA DE LÍMITES COMERCIALES ----
+    if es_premium_o_vip:
+        limite_texto = "Soporte de Carga VIP: Máximo 4GB por archivo (Límite Ampliado) 💎"
+    else:
+        limite_texto = "Soporte de Carga Regular: Máximo 2GB por archivo (Obtén Plan VIP para habilitar 4GB) ⚡"
         
-        if st.button("🚀 INICIAR COMPILACIÓN EN SEGUNDO PLANO"):
-            with st.spinner("Enviando orden de renderizado asíncrono..."):
-                try:
-                    datos_formulario = {
-                        "formato": formato_seleccionado,
-                        "con_subtitulos": str(con_subtitulos).lower(),
-                        "estilo_subtitulos": estilo_elegido,
-                        "url_remoto": url_remoto,
-                        "diccionario_manual": diccionario_manual
-                    }
+    st.markdown(f"<small style='color:#94a3b8;'>{limite_texto}</small>", unsafe_allow_html=True)
+    video_subido = st.file_uploader(
+        "O arrastra tu archivo multimedia local aquí:", 
+        type=["mp4", "mkv", "mov"],
+        help=f"La tasa de transferencia de este entorno acepta hasta {limite_texto}. Gobernado bajo las directivas del archivo config.toml"
+    )
+    
+    # --- VALIDACIÓN DEL TAMAÑO EN EL FRONTEND ANTES DE SUBIR ---
+    bloquear_envio = False
+    if video_subido is not None:
+        # Convertir bytes a Gigabytes (1 GB = 1024 * 1024 * 1024 bytes)
+        tamanio_gb = video_subido.size / (1024 * 1024 * 1024)
+        if not es_premium_o_vip and tamanio_gb > 2.0:
+            st.error(f"⛔ ¡Acceso Denegado! Tu archivo pesa {tamanio_gb:.2f} GB. El plan gratuito solo permite hasta 2 GB. Por favor, adquiere el plan VIP.")
+            bloquear_envio = True
+        elif es_premium_o_vip and tamanio_gb > 4.0:
+            st.error(f"⛔ ¡Límite Excedido! Incluso las cuentas VIP tienen un tope máximo de 4 GB por infraestructura. Tu archivo pesa {tamanio_gb:.2f} GB.")
+            bloquear_envio = True
+
+    boton_procesar = st.button("🚀 INICIAR PROCESAMIENTO HÍBRIDO", disabled=bloquear_envio)
+
+with col_derecha:
+    st.subheader("📊 Monitorización de Clips y Descarga")
+    
+    if not boton_procesar and "tarea_id" not in st.session_state:
+        st.info("⌛ Configura tu material en la sección izquierda y presiona el botón para inicializar la Grid de descargas.")
+    
+    if boton_procesar and not bloquear_envio:
+        st.session_state.procesando = True
+        with st.spinner("Conectando con el clúster de procesamiento asíncrono..."):
+            try:
+                datos_formulario = {
+                    "formato": formato_seleccionado,
+                    "con_subtitulos": str(con_subtitulos).lower(),
+                    "estilo_subtitulos": estilo_elegido,
+                    "url_remoto": url_remoto,
+                    "diccionario_manual": diccionario_manual
+                }
+                
+                if video_subido:
+                    archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
+                    r = requests.post(f"{BACKEND_BASE_URL}/procesar", files=archivos, data=datos_formulario)
+                else:
+                    r = requests.post(f"{BACKEND_BASE_URL}/procesar", data=datos_formulario)
                     
-                    if video_subido:
-                        archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
-                        r = requests.post(f"{BACKEND_BASE_URL}/procesar", files=archivos, data=datos_formulario)
-                    else:
-                        r = requests.post(f"{BACKEND_BASE_URL}/procesar", data=datos_formulario)
+                if r.status_code == 200:
+                    st.session_state.tarea_id = r.json().get("tarea_id")
+                else:
+                    st.error("Error al inyectar comando al pipeline de video.")
+            except Exception as e:
+                st.error(f"Error crítico de red: {str(e)}")
+
+    # --- POLLING LOOP AVANZADO CON SKELETON LOADERS ---
+    if "tarea_id" in st.session_state:
+        tarea_id = st.session_state.tarea_id
+        placeholder_monitor = st.empty()
+        
+        fases_ia = [
+            "Aislamiento de silencios y frecuencias de voz con Whisper",
+            "Análisis adaptativo VTuber / Tracker facial OpenCV predictivo",
+            "Generación e inyección tipográfica animada Pop-In",
+            "Exportación y empaquetado de Shorts independientes en disco"
+        ]
+        
+        while True:
+            try:
+                check_r = requests.get(f"{BACKEND_BASE_URL}/estado/{tarea_id}")
+                if check_r.status_code == 200:
+                    info_tarea = check_r.json()
+                    estado = info_tarea.get("status")
+                    
+                    if estado == "processing":
+                        with placeholder_monitor.container():
+                            st.markdown("#### ⚙️ Pipeline de Ejecución de Inteligencia Artificial:")
+                            for i, fase in enumerate(fases_ia):
+                                if i == 0:
+                                    st.markdown(f'<div class="clip-card processing"><span>🔄 <b>Fase 1:</b> {fase}</span><span style="color:#3b82f6; font-weight:bold;">Procesando...</span></div><div class="skeleton-loader"></div>', unsafe_allow_html=True)
+                                elif i == 1:
+                                    st.markdown(f'<div class="clip-card locked"><span>🔒 <b>Fase 2:</b> {fase}</span><span style="color:#ef4444;">Esperando fase previa</span></div>', unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f'<div class="clip-card locked"><span>🔒 <b>Fase {i+1}:</b> {fase}</span></div>', unsafe_allow_html=True)
+                                    
+                    elif estado == "completed":
+                        placeholder_monitor.empty()
+                        st.balloons()
                         
-                    if r.status_code == 200:
-                        tarea_id = r.json().get("tarea_id")
-                        status_placeholder = st.empty()
-                        bar_progreso = st.progress(0)
+                        st.markdown('<div class="clip-card unlocked"><span>✅ <b>¡Parrilla Multi-Clip Compilada con Éxito!</b></span><span style="color:#deff9a; font-weight:bold;">Listo</span></div>', unsafe_allow_html=True)
+                        st.metric(label="📊 Curation Viral Score Promedio", value=info_tarea.get("viral_score", "95%"))
                         
-                        # --- POLLING DE ESTADO (ANTI-TIMEOUT) ---
-                        while True:
-                            check_r = requests.get(f"{BACKEND_BASE_URL}/estado/{tarea_id}")
-                            if check_r.status_code == 200:
-                                info_tarea = check_r.json()
-                                estado = info_tarea.get("status")
-                                
-                                if estado == "processing":
-                                    status_placeholder.markdown("⏳ **La IA está aislando silencios, procesando avatares mediante filtro híbrido y animando subtítulos...**")
-                                    bar_progreso.progress(45)
-                                elif estado == "completed":
-                                    status_placeholder.empty()
-                                    bar_progreso.progress(100)
-                                    st.balloons()
-                                    
-                                    st.subheader("🔥 ¡Tus Clips Listos para Redes!")
-                                    st.metric(label="📊 Curation Viral Score", value=info_tarea.get("viral_score", "94%"))
-                                    st.success(f"💡 **Resultado:** {info_tarea.get('analisis_popularidad')}")
-                                    
-                                    # --- PARRILLA INTERACTIVA CON DESCARGA PROPIAS POR ELEMENTO ---
-                                    total_clips = info_tarea.get("total_clips", 1)
-                                    st.markdown("### 🎬 Selecciona y previsualiza cada Short antes de bajarlo:")
-                                    
-                                    opciones_clips = [f"Short # {i+1}" for i in range(total_clips)]
-                                    clip_elegido = st.selectbox("¿Qué short quieres revisar?", options=opciones_clips)
-                                    
-                                    # Mapear selección a index real de almacenamiento
-                                    indice_clip = opciones_clips.index(clip_elegido) + 1
-                                    
-                                    # Petición HTTP directa pasando el ID del short específico
-                                    res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}?clip_num={indice_clip}")
-                                    
-                                    if res_download.status_code == 200:
-                                        # 📺 Previsualización en vivo del clip seleccionado
-                                        st.video(res_download.content)
-                                        
-                                        # 📥 Método de descarga embebido propio para este video
-                                        st.download_button(
-                                            label=f"📥 Descargar {clip_elegido} Ahora", 
-                                            data=res_download.content, 
-                                            file_name=f"zexos_{tarea_id[:5]}_clip_{indice_clip}.mp4", 
-                                            mime="video/mp4"
-                                        )
-                                    else:
-                                        st.error("❌ No se pudo cargar este clip específico de la parrilla.")
-                                    break
-                                elif estado == "failed":
-                                    st.error(f"❌ Falló el procesamiento: {info_tarea.get('error')}")
-                                    break
-                            else:
-                                st.error("❌ Conexión interrumpida.")
-                                break
-                            time.sleep(5)
-                except Exception as e:
-                    st.error(f"Error en llamada de red: {str(e)}")
+                        # --- INTERFAZ DE REPRODUCTOR INDEPENDIENTE ---
+                        total_clips = info_tarea.get("total_clips", 1)
+                        st.markdown("### 🎬 Selector de Shorts Disponibles:")
+                        
+                        opciones_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
+                        clip_elegido = st.selectbox("Selecciona qué fragmento deseas procesar:", options=opciones_clips)
+                        indice_clip = opciones_clips.index(clip_elegido) + 1
+                        
+                        if st.button(f"🔍 Cargar y Verificar {clip_elegido}"):
+                            with st.spinner("Cargando archivo desde la Grid..."):
+                                res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}?clip_num={indice_clip}")
+                                if res_download.status_code == 200:
+                                    st.video(res_download.content)
+                                    st.download_button(
+                                        label=f"📥 Descargar {clip_elegido} a Local", 
+                                        data=res_download.content, 
+                                        file_name=f"zexos_short_{tarea_id[:5]}_clip_{indice_clip}.mp4", 
+                                        mime="video/mp4"
+                                    )
+                                else:
+                                    st.error("❌ No se pudo extraer este clip específico del clúster de almacenamiento.")
+                        break
+                    elif estado == "failed":
+                        st.error(f"❌ Error en clúster: {info_tarea.get('error')}")
+                        break
+                time.sleep(4)
+            except Exception as e:
+                st.error(f"Reconectando con el servidor central: {str(e)}")
+                break
