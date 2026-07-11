@@ -61,7 +61,7 @@ es_admin = False
 rango_usuario = "Gratuito"
 lista_usuarios_cruda = []
 
-# Limpiamos exhaustivamente la entrada de la interfaz
+# Limpiamos la entrada de la interfaz
 correo_ingresado_limpio = email_usuario.strip().lower()
 
 if correo_ingresado_limpio == "zexosadmin":
@@ -84,21 +84,15 @@ try:
                     if valor is None:
                         continue
                     
-                    # Convertimos el contenido de la celda de la BD a texto limpio en minúsculas
                     texto_columna = str(valor).strip().lower()
                     
-                    # CORRECCIÓN KEY: Eliminamos el filtro obligatorio del "@" 
                     # Comparamos si coincide exactamente o si el valor ingresado está contenido dentro del campo
                     if correo_ingresado_limpio == texto_columna or (len(correo_ingresado_limpio) > 3 and correo_ingresado_limpio in texto_columna):
                         es_premium_o_vip = True
-                        rango_usuario = "VIP / Premium Ilimitado 💎"
+                        rango_usuario = "VIP 💎"  # Modificado a petición para mostrar solo VIP
                         break
                 if es_premium_o_vip:
                     break
-    else:
-        # Alerta preventiva en caso de que la tabla responda vacía por restricciones de RLS
-        st.sidebar.warning("⚠️ La base de datos no retornó registros. Verifica las políticas RLS en Supabase.")
-
 except Exception as e:
     st.warning(f"Aviso de Red: {str(e)}")
 
@@ -120,7 +114,6 @@ if es_admin:
     
     st.sidebar.markdown("**📍 1. Monitor de Usuarios VIP:**")
     for idx, fila in enumerate(lista_usuarios_cruda):
-        # Muestra el primer campo de texto útil si no encuentra una estructura con '@'
         valores = [str(v) for v in fila.values() if v is not None and str(v).lower() != 'id']
         correo_mostrar = valores[0] if valores else f"ID {idx+1}"
         st.sidebar.text(f"• {correo_mostrar}")
@@ -189,7 +182,7 @@ else:
     if es_admin:
         st.success("⚡ **Modo Root Activo:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
     else:
-        st.success("⚡ **Capa PRO Desbloqueada:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
+        st.success("⚡ **Capa VIP Desbloqueada:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
 
 # Subidor de archivos
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
