@@ -53,11 +53,12 @@ es_premium_o_vip = False
 rango_usuario = "Gratuito"
 
 try:
-    respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
+    # Ajustado para buscar en la columna exacta: 'correo electrónico'
+    respuesta = supabase.table("usuarios_vip").select('"correo electrónico"').eq("correo electrónico", email_usuario).execute()
     if respuesta.data and len(respuesta.data) > 0:
         es_premium_o_vip = True
         rango_usuario = "VIP / Premium Ilimitado 💎"
-except Exception:
+except Exception as e:
     st.warning("Aviso: Nodo de base de datos en espera.")
 
 # --- BARRA LATERAL ---
