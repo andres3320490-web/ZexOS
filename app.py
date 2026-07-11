@@ -53,11 +53,16 @@ es_premium_o_vip = False
 rango_usuario = "Gratuito"
 
 try:
-    # Corrección de escape: usamos '"correo electrónico"' con comillas simples y dobles para forzar el nombre exacto de PostgreSql
-    respuesta = supabase.table("usuarios_vip").select("*").filter('"correo electrónico"', "eq", email_usuario).execute()
-    if respuesta.data and len(respuesta.data) > 0:
-        es_premium_o_vip = True
-        rango_usuario = "VIP / Premium Ilimitado 💎"
+    # Descargamos los datos para buscar el correo directamente en Python de forma segura
+    respuesta = supabase.table("usuarios_vip").select("*").execute()
+    if respuesta.data:
+        # Buscamos en cada fila si el correo coincide con algún valor registrado
+        for fila in respuesta.data:
+            valores = [str(val).strip().lower() for val in fila.values()]
+            if email_usuario in valores:
+                es_premium_o_vip = True
+                rango_usuario = "VIP / Premium Ilimitado 💎"
+                break
 except Exception as e:
     st.warning(f"Aviso de Red: {str(e)}")
 
@@ -108,8 +113,9 @@ st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
 
+# Actualizado el aviso visual del límite a 120 minutos
 if not es_premium_o_vip:
-    st.warning("⚠️ **Capa Free Activa:** Límite estricto de **60 segundos** por video.")
+    st.warning("⚠️ **Capa Free Activa:** Límite estricto de **120 minutos** por video.")
 else:
     st.success("⚡ **Capa PRO Desbloqueada:** Renders ilimitados activos.")
 
@@ -128,8 +134,9 @@ if video_subido:
             
         st.write(f"⏱️ Duración detectada: `{duracion_real:.2f} segundos`")
         
-        if duracion_real > 60.0 and not es_premium_o_vip:
-            st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de la cuenta gratuita.")
+        # 7200.0 segundos equivalen exactamente a 120 minutos
+        if duracion_real > 7200.0 and not es_premium_o_vip:
+            st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de 120 minutos de la cuenta gratuita.")
             st.info("💡 **SaaS Lock:** Utiliza el botón de PayPal en la barra lateral para adquirir tu suscripción.")
         else:
             st.success("✅ Estructura multimedia óptima para el renderizado.")
