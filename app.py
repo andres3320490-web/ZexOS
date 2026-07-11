@@ -102,7 +102,7 @@ if video_subido or url_remoto:
     col_prev, col_editor = st.columns([1, 1])
     
     with col_prev:
-        st.subheader("📺 Previsualización del Vídeo")
+        st.subheader("📺 Previsualización del Vídeo Original")
         if video_subido:
             st.video(video_subido)
         elif url_remoto:
@@ -110,7 +110,6 @@ if video_subido or url_remoto:
             
     with col_editor:
         st.subheader("✍️ Editor de Transcripción Manual (Guía de Modulación)")
-        st.caption("Escribe palabras clave particulares de tu canal (ej: nombre de VTuber, expresiones, jergas) separadas por comas para forzar el diccionario y pintarlas de color de impacto.")
         diccionario_manual = st.text_area("Ganchos / Correcciones prioritarias:", placeholder="ejemplo: VTuber, ZexOS, clips, épico, brutal", height=100)
         
         if st.button("🚀 INICIAR COMPILACIÓN EN SEGUNDO PLANO"):
@@ -135,7 +134,7 @@ if video_subido or url_remoto:
                         status_placeholder = st.empty()
                         bar_progreso = st.progress(0)
                         
-                        # --- LOOP ANTI-TIMEOUT POLLING ENGINE ---
+                        # --- POLLING DE ESTADO (ANTI-TIMEOUT) ---
                         while True:
                             check_r = requests.get(f"{BACKEND_BASE_URL}/estado/{tarea_id}")
                             if check_r.status_code == 200:
@@ -152,14 +151,37 @@ if video_subido or url_remoto:
                                     
                                     st.subheader("🔥 ¡Tus Clips Listos para Redes!")
                                     st.metric(label="📊 Curation Viral Score", value=info_tarea.get("viral_score", "94%"))
+                                    st.success(f"💡 **Resultado:** {info_tarea.get('analisis_popularidad')}")
                                     
-                                    res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}")
+                                    # --- PARRILLA INTERACTIVA CON DESCARGA PROPIAS POR ELEMENTO ---
+                                    total_clips = info_tarea.get("total_clips", 1)
+                                    st.markdown("### 🎬 Selecciona y previsualiza cada Short antes de bajarlo:")
+                                    
+                                    opciones_clips = [f"Short # {i+1}" for i in range(total_clips)]
+                                    clip_elegido = st.selectbox("¿Qué short quieres revisar?", options=opciones_clips)
+                                    
+                                    # Mapear selección a index real de almacenamiento
+                                    indice_clip = opciones_clips.index(clip_elegido) + 1
+                                    
+                                    # Petición HTTP directa pasando el ID del short específico
+                                    res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}?clip_num={indice_clip}")
+                                    
                                     if res_download.status_code == 200:
+                                        # 📺 Previsualización en vivo del clip seleccionado
                                         st.video(res_download.content)
-                                        st.download_button("📥 Descargar Primer Clip de la Parrilla", data=res_download.content, file_name=f"zexos_short_{tarea_id[:5]}.mp4", mime="video/mp4")
+                                        
+                                        # 📥 Método de descarga embebido propio para este video
+                                        st.download_button(
+                                            label=f"📥 Descargar {clip_elegido} Ahora", 
+                                            data=res_download.content, 
+                                            file_name=f"zexos_{tarea_id[:5]}_clip_{indice_clip}.mp4", 
+                                            mime="video/mp4"
+                                        )
+                                    else:
+                                        st.error("❌ No se pudo cargar este clip específico de la parrilla.")
                                     break
                                 elif estado == "failed":
-                                    st.error(f"❌ Falló el procesamiento del motor: {info_tarea.get('error')}")
+                                    st.error(f"❌ Falló el procesamiento: {info_tarea.get('error')}")
                                     break
                             else:
                                 st.error("❌ Conexión interrumpida.")
