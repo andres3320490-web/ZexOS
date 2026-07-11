@@ -55,7 +55,8 @@ st.markdown("""
 # 🌐 URL CORRECTA Y DINÁMICA DEL BACKEND (SIN CORRECCIÓN .STATIC)
 # =========================================================================
 # Se elimina '.static' para que Hugging Face permita el flujo dinámico de peticiones
-BACKEND_BASE_URL = "https://vzex-zexiastudio.hf.space"
+# Coloca aquí tu usuario de Hugging Face seguido de un guion y el nombre del space
+BACKEND_BASE_URL = "https://vzex-zexiastudio.static.hf.space"
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
