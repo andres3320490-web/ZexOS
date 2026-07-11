@@ -8,5 +8,5 @@ numpy
 opencv-python-headless
 torch --index-url https://download.pytorch.org/whl/cpu
 yt-dlp
-whisper-timestamped
+openai-whisper
 moviepy==2.1.1
