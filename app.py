@@ -14,8 +14,8 @@ st.set_page_config(
 
 # Conexión Segura con tu Base de Datos Supabase
 # ⚠️ ADVERTENCIA: Reemplaza "TU_PROJECT_URL_AQUÍ" con tu enlace de Supabase (ej: https://xxxx.supabase.co)
-SUPABASE_URL = "TU_PROJECT_URL_AQUÍ"
-SUPABASE_KEY = "sb_publisible_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
+SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
+SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
 # Inicializamos el cliente de la base de datos de manera segura
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
