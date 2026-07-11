@@ -55,13 +55,13 @@ if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN DE RANGO / ADMIN (SISTEMA DE COINCIDENCIA BLINDADA) ---
+# --- VERIFICACIÓN DE RANGO / ADMIN (SISTEMA DE COINCIDENCIA ABSOLUTA) ---
 es_premium_o_vip = False
 es_admin = False
 rango_usuario = "Gratuito"
 lista_usuarios_cruda = []
 
-# Limpiamos por completo el correo que escribe el usuario en la pantalla
+# Limpiamos exhaustivamente la entrada de la interfaz
 correo_ingresado_limpio = email_usuario.strip().lower()
 
 if correo_ingresado_limpio == "zexosadmin":
@@ -71,27 +71,34 @@ if correo_ingresado_limpio == "zexosadmin":
     email_usuario = "admin@zexos.com"
 
 try:
-    # Traemos los datos de Supabase
+    # Traemos todos los registros de la tabla
     respuesta = supabase.table("usuarios_vip").select("*").execute()
+    
     if respuesta.data:
         lista_usuarios_cruda = respuesta.data
         
-        # Si no es el administrador, ejecutamos el escaneo inteligente de correos
+        # Si no es la clave maestra admin, escaneamos celda por celda
         if not es_admin:
             for fila in respuesta.data:
-                # Buscamos en cada columna de la fila actual
                 for clave, valor in fila.items():
+                    if valor is None:
+                        continue
+                    
+                    # Convertimos el contenido de la celda de la BD a texto limpio en minúsculas
                     texto_columna = str(valor).strip().lower()
                     
-                    # Filtro inteligente: Validamos si este campo de la celda es un correo (contiene '@')
-                    if "@" in texto_columna:
-                        # Si las letras y números coinciden exactamente con lo puesto al inicio
-                        if correo_ingresado_limpio == texto_columna:
-                            es_premium_o_vip = True
-                            rango_usuario = "VIP / Premium Ilimitado 💎"
-                            break
+                    # CORRECCIÓN KEY: Eliminamos el filtro obligatorio del "@" 
+                    # Comparamos si coincide exactamente o si el valor ingresado está contenido dentro del campo
+                    if correo_ingresado_limpio == texto_columna or (len(correo_ingresado_limpio) > 3 and correo_ingresado_limpio in texto_columna):
+                        es_premium_o_vip = True
+                        rango_usuario = "VIP / Premium Ilimitado 💎"
+                        break
                 if es_premium_o_vip:
                     break
+    else:
+        # Alerta preventiva en caso de que la tabla responda vacía por restricciones de RLS
+        st.sidebar.warning("⚠️ La base de datos no retornó registros. Verifica las políticas RLS en Supabase.")
+
 except Exception as e:
     st.warning(f"Aviso de Red: {str(e)}")
 
@@ -113,8 +120,9 @@ if es_admin:
     
     st.sidebar.markdown("**📍 1. Monitor de Usuarios VIP:**")
     for idx, fila in enumerate(lista_usuarios_cruda):
-        correos = [val for val in fila.values() if "@" in str(val)]
-        correo_mostrar = correos[0] if correos else f"ID {idx+1}"
+        # Muestra el primer campo de texto útil si no encuentra una estructura con '@'
+        valores = [str(v) for v in fila.values() if v is not None and str(v).lower() != 'id']
+        correo_mostrar = valores[0] if valores else f"ID {idx+1}"
         st.sidebar.text(f"• {correo_mostrar}")
         
     st.sidebar.markdown("**📍 2. Sistema de Control:**")
