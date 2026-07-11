@@ -7,15 +7,23 @@ from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
 
 # =========================================================================
-# 🚀 INICIADOR AUTOMÁTICO DE BACKEND HÍBRIDO INTERNO
+# 🚀 INICIADOR AUTOMÁTICO DE BACKEND HÍBRIDO CON CAPTURA DE LOGS
 # =========================================================================
 if "backend_inicializado" not in st.session_state:
-    # Lanza FastAPI en segundo plano en el puerto local 8000
-    subprocess.Popen(["uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"])
+    # Creamos o limpiamos el archivo de registro de errores para FastAPI
+    with open("log_backend.txt", "w") as log_file:
+        subprocess.Popen(
+            ["uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"],
+            stdout=log_file,
+            stderr=log_file
+        )
     st.session_state.backend_inicializado = True
-    time.sleep(2)  # Tiempo de gracia para que levante la API
+    
+    # Mensaje temporal de carga en lo que levanta el subproceso
+    with st.spinner("Iniciando clúster de IA interno (Cargando Whisper/OpenCV)..."):
+        time.sleep(12)  # Tiempo de gracia aumentado para evitar 'Connection refused'
 
-# Comunicación local directa dentro del mismo contenedor
+# Comunicación local directa interna
 BACKEND_BASE_URL = "http://127.0.0.1:8000"
 # =========================================================================
 
@@ -28,10 +36,12 @@ st.set_page_config(
 
 controller = CookieController()
 
+# Conexión Segura al clúster de Base de Datos
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# --- INYECCIÓN DE INTERFAZ HORIZONTAL PREMIUM ---
 st.markdown("""
     <style>
     .stApp { background-color: #07090e; color: #E2E8F0; }
@@ -156,7 +166,8 @@ with col_izquierda:
     st.subheader("📥 Carga de Material Audiovisual")
     url_remoto = st.text_input("🔗 Enlace Directo (YouTube, TikTok, Twitch):", placeholder="https://...").strip()
     limite_texto = "Máximo 4GB 💎" if es_premium_o_vip else "Máximo 2GB ⚡"
-    st.markdown(f"<small style='color:#94a3b8;'>Soporte: {limite_texto}</small>", unsafe_allow_html=True)
+    st.markdown(f"<small style='color:#94a3b8;'>Soporte: {limite_texto}</small>",
+                unsafe_allow_html=True)
     video_subido = st.file_uploader("O sube tu archivo local aquí:", type=["mp4", "mkv", "mov"])
     
     bloquear_envio = False
@@ -201,6 +212,17 @@ with col_derecha:
                     st.error(f"❌ Error en la comunicación ({r.status_code}): {r.text}")
             except Exception as e:
                 st.error(f"Error crítico de red: {str(e)}")
+                
+                # --- SISTEMA DE DIAGNÓSTICO EN TIEMPO REAL ---
+                st.sidebar.error("❌ El Servidor de la API falló al arrancar")
+                if os.path.exists("log_backend.txt"):
+                    with open("log_backend.txt", "r") as f:
+                        logs = f.read()
+                    if logs:
+                        st.sidebar.markdown("**Rastreo del error (log_backend.txt):**")
+                        st.sidebar.code(logs[-1000:]) # Muestra los últimos 1000 caracteres del error
+                    else:
+                        st.sidebar.caption("El archivo de log está vacío. Uvicorn no pudo ni empezar.")
 
     if "tarea_id" in st.session_state:
         tarea_id = st.session_state.tarea_id
@@ -221,7 +243,7 @@ with col_derecha:
                     
                     if estado in ["processing", "pending", "queued"]:
                         with placeholder_monitor.container():
-                            st.markdown("#### ⚙️ Pipeline de Execution de IA:")
+                            st.markdown("#### ⚙️ Pipeline de Ejecución de IA:")
                             for i, fase in enumerate(fases_ia):
                                 if i == 0 and estado == "processing":
                                     st.markdown(f'<div class="clip-card processing"><span>🔄 <b>Fase 1:</b> {fase}</span><span style="color:#3b82f6; font-weight:bold;">Procesando...</span></div><div class="skeleton-loader"></div>', unsafe_allow_html=True)
