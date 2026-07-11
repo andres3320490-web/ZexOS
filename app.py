@@ -13,25 +13,33 @@ st.set_page_config(
 )
 
 # Conexión Segura con tu Base de Datos Supabase
-# ⚠️ ADVERTENCIA: Reemplaza "TU_PROJECT_URL_AQUÍ" con tu enlace de Supabase (ej: https://xxxx.supabase.co)
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
-# Inicializamos el cliente de la base de datos de manera segura
+# Inicializamos el cliente de la base de datos
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Estilo Cyberpunk Flúor
+# Estilo Cyberpunk Flúor + Estilo personalizado para el botón PRO
 st.markdown("""
     <style>
     .stApp { background-color: #0A0D14; color: #E2E8F0; }
     h1, h2, h3, .stMarkdown strong { color: #deff9a !important; }
+    
+    /* Botón general */
     .stButton>button { 
         width: 100%; background-color: #deff9a !important; color: #0A0D14 !important; 
         font-weight: bold !important; border-radius: 8px !important; border: none !important;
         box-shadow: 0px 4px 15px rgba(222, 255, 154, 0.3);
     }
-    .ad-card {
-        background-color: #121620; border: 1px solid #deff9a; padding: 15px; border-radius: 8px; text-align: center;
+    
+    /* Caja contenedora para la compra del plan */
+    .pro-box {
+        background-color: #121620; 
+        border: 2px dashed #deff9a; 
+        padding: 15px; 
+        border-radius: 8px; 
+        text-align: center;
+        margin-bottom: 20px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -49,39 +57,43 @@ if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN AUTOMÁTICA DE RANGO (VIP / PREMIUM / GRATIS) ---
+# --- VERIFICACIÓN AUTOMÁTICA DE RANGO ---
 es_premium_o_vip = False
 rango_usuario = "Gratuito"
 
 try:
-    # Consultamos a Supabase si este correo existe en la lista de compradores o VIPs
     respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
     if len(respuesta.data) > 0:
         es_premium_o_vip = True
         rango_usuario = "VIP / Premium Ilimitado 💎"
 except Exception:
-    st.error("Error temporal de conexión con el nodo de base de datos. Verifica que tu SUPABASE_URL sea correcta.")
+    st.error("Error de conexión con el nodo de base de datos.")
 
+# --- BARRA LATERAL (ESTRUCTURA NUEVA) ---
 st.sidebar.markdown(f"**Usuario Activo:** `{email_usuario}`")
 st.sidebar.markdown(f"**Rango de Cuenta:** `{rango_usuario}`")
-
-# --- ANUNCIOS Y CONFIGURACIÓN ---
 st.sidebar.markdown("---")
+
+# SI EL USUARIO ES GRATUITO, LE MUESTRA EL CUADRO DESTACADO PARA PASARSE A PRO
+if not es_premium_o_vip:
+    st.sidebar.markdown("""
+    <div class="pro-box">
+        <span style="font-size: 18px;">💎 <b>PLAN PRO SAAS</b></span><br>
+        <span style="color: #deff9a; font-size: 22px; font-weight: bold;">$10.00 / mes</span><br>
+        <p style="font-size: 12px; color: #A0AEC0; margin-top: 5px;">Desbloquea renders de hasta 2 horas, sin esperas y soporte prioritario.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Aquí pegas el link de Lemon Squeezy que copiaste en el Paso 1
+    # Añadiendo '?embed=1' al final del enlace, Lemon Squeezy sabe que debe abrir el cuadro flotante sobre la web
+    url_pago_lemon = "https://www.google.com"
+    
+    st.sidebar.link_button("⭐ ADQUIRIR 1 MES PRO NOW", url_pago_lemon)
+    st.sidebar.markdown("---")
+
 st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("📢 Patrocinadores")
-html_anuncio = """
-<div class="ad-card">
-    <a href="https://tu-tienda.lemonsqueezy.com" target="_blank" style="text-decoration: none; color: #E2E8F0;">
-        <p style="margin: 0; font-size: 14px; font-weight: bold; color: #deff9a;">⭐ ¡Pásate a PRO!</p>
-        <p style="margin: 6px 0 0 0; font-size: 11px; color: #A0AEC0;">Elimina el límite de 60 segundos y procesa videos de hasta 2 horas haciendo clic aquí.</p>
-    </a>
-</div>
-"""
-st.sidebar.html(html_anuncio)
 
 # --- PANEL DE SUBIDA ---
 st.markdown("---")
@@ -105,10 +117,10 @@ if video_subido:
             
         st.write(f"⏱️ Duración detectada: `{duracion_real:.2f} segundos`")
         
-        # APLICAR FILTRO DE TIEMPO SOLO A LOS QUE NO SON VIP/PREMIUM
         if duracion_real > 60.0 and not es_premium_o_vip:
             st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de la cuenta gratuita.")
-            st.markdown(f"💡 **¿Quieres renderizar este video?** [Haz clic aquí para comprar el Plan Pro](https://tu-tienda.lemonsqueezy.com) y activa tu correo al instante.")
+            if not es_premium_o_vip:
+                st.markdown(f"💡 **¿Quieres renderizar este video?** [Haz clic aquí para activar el Plan Pro]({url_pago_lemon}) e introduce tu tarjeta para continuar.")
         else:
             st.success("✅ Estructura multimedia óptima para el renderizado.")
             
