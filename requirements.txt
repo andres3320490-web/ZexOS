@@ -1,8 +1,5 @@
-fastapi
-uvicorn
-whisper-timestamped
-moviepy
-opencv-python-headless
-torch --index-url https://download.pytorch.org/whl/cpu
-numpy
+streamlit
 requests
+moviepy
+numpy
+supabase
