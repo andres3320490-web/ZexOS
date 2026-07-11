@@ -53,13 +53,12 @@ es_premium_o_vip = False
 rango_usuario = "Gratuito"
 
 try:
-    # Corrección estricta para la consulta de columnas con nombres en español/espacios
-    respuesta = supabase.table("usuarios_vip").select("text").eq("correo electrónico", email_usuario).execute()
+    # Corrección aquí: Cambiado "text" por "*" para seleccionar toda la fila correctamente
+    respuesta = supabase.table("usuarios_vip").select("*").eq("correo electrónico", email_usuario).execute()
     if respuesta.data and len(respuesta.data) > 0:
         es_premium_o_vip = True
         rango_usuario = "VIP / Premium Ilimitado 💎"
 except Exception as e:
-    # Si sigue fallando, te mostrará el error real en pantalla para saber qué pasa
     st.warning(f"Aviso de Red: {str(e)}")
 
 # --- BARRA LATERAL ---
