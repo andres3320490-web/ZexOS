@@ -1,6 +1,4 @@
 streamlit
-fastapi
-uvicorn
 requests
 supabase
 streamlit-cookies-controller
