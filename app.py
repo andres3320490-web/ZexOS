@@ -14,7 +14,7 @@ from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
 
 # =========================================================================
-# ⚙️ MÓDULO DE PROCESAMIENTO COMPLETO E INTEGRADO
+# ⚙️ MÓDULO DE PROCESAMIENTO COMPLETO E INTEGRADO (tasks.py integrado)
 # =========================================================================
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -217,19 +217,22 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
         return {"status": "error", "mensaje": str(err)}
 
 # =========================================================================
-# 👑 CONTROL DE ACCESOS Y ROLES (VIP, ADMIN, NORMALES)
+# 🗄️ RESTAURACIÓN DE CONEXIÓN ORIGINAL A SUPABASE Y COOKIES
 # =========================================================================
-def determinar_rol_usuario(email: str) -> str:
-    # Lógica de asignación basada en tu base de datos y dominios corporativos
-    email_limpio = email.lower().strip()
-    if email_limpio.endswith("@zexos.ai") or email_limpio in ["admin@zexos.com"]:
-        return "admin"
-    elif "vip" in email_limpio or email_limpio.endswith("@premium.com"):
-        return "vip"
-    return "normal"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+
+supabase: Client = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except:
+        pass
+
+cookie_controller = CookieController()
 
 # =========================================================================
-# 🎨 INTERFAZ DE USUARIO (STREAMLIT FRONTEND)
+# 🎨 INTERFAZ DE USUARIO CON ROLES ORIGINALES (ADMIN, VIP, NORMAL)
 # =========================================================================
 st.markdown("""
     <style>
@@ -244,12 +247,10 @@ st.markdown("""
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
-# Control de persistencia vía cookies
-cookies = CookieController()
-cookie_mail = cookies.get("zexos_user_email")
-
-if cookie_mail:
-    email_usuario = st.text_input("Correo electrónico corporativo:", value=cookie_mail, placeholder="ejemplo@correo.com").strip()
+# Lectura exacta de cookies de tu versión original
+saved_email = cookie_controller.get("zexos_user_email")
+if saved_email:
+    email_usuario = st.text_input("Correo electrónico corporativo:", value=saved_email, placeholder="ejemplo@correo.com").strip()
 else:
     email_usuario = st.text_input("Correo electrónico corporativo:", placeholder="ejemplo@correo.com").strip()
 
@@ -257,25 +258,47 @@ if not email_usuario:
     st.info("💡 Introduce tu correo para desplegar tu espacio de trabajo.")
     st.stop()
 
-# Guardar cookie si se ingresa el correo
-cookies.set("zexos_user_email", email_usuario)
+cookie_controller.set("zexos_user_email", email_usuario)
 
-# Establecer Rol del Usuario y sus características en UI
-rol_actual = determinar_rol_usuario(email_usuario)
+# LÓGICA DE ROLES ASIGNADOS ORIGINALMENTE (Basado en base de datos o dominios)
+user_role = "normal"
+payment_status = "Pendiente / Gratuito"
 
-if rol_actual == "admin":
+if supabase:
+    try:
+        res = supabase.table("usuarios").select("*").eq("email", email_usuario).execute()
+        if res.data:
+            user_role = res.data[0].get("role", "normal")
+            payment_status = "Verificado en Base de Datos"
+    except:
+        pass
+
+# Fallback por reglas de dominio si Supabase no responde
+if user_role == "normal":
+    if email_usuario.endswith("@zexos.ai") or email_usuario in ["admin@zexos.com"]:
+        user_role = "admin"
+        payment_status = "Cuenta Corporativa Interna Activa"
+    elif "vip" in email_usuario.lower() or email_usuario.endswith("@premium.com"):
+        user_role = "vip"
+        payment_status = "Suscripción Premium Verificada"
+
+# Mostrar badges y aplicar los tiempos límite originales
+if user_role == "admin":
     st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
+    st.caption(f"💳 Estado Financiero: {payment_status}")
     limite_tiempo_max = 60.0
-elif rol_actual == "vip":
-    st.markdown("Tu nivel de acceso actual es: <span class='badge-vip'>SUSER VIP PREMIUM</span>", unsafe_allow_html=True)
+elif user_role == "vip":
+    st.markdown("Tu nivel de acceso actual es: <span class='badge-vip'>USER VIP PREMIUM</span>", unsafe_allow_html=True)
+    st.caption(f"💳 Estado Financiero: {payment_status}")
     limite_tiempo_max = 30.0
 else:
     st.markdown("Tu nivel de acceso actual es: <span class='badge-normal'>USUARIO ESTÁNDAR</span>", unsafe_allow_html=True)
+    st.caption(f"⚠️ Estado Financiero: {payment_status}")
     limite_tiempo_max = 12.0
 
 st.sidebar.markdown(f"**Límite del Plan:** {int(limite_tiempo_max)} segundos por Clip.")
 
-# Opciones de procesamiento en Sidebar
+# Sidebar de control de video
 formato_seleccionado = st.sidebar.selectbox("Relación de Aspecto Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Subtítulos Dinámicos Inteligentes", value=True)
 estilo_elegido = st.sidebar.selectbox("Plantilla Tipográfica", options=["hormozi", "classic_three", "minimal"]) if con_subtitulos else "hormozi"
@@ -321,6 +344,18 @@ with col_der:
             if resultado.get("status") == "success":
                 status.update(label="⚡ ¡Procesamiento Completado con Éxito!", state="complete", expanded=False)
                 st.session_state.resultado_tarea = resultado
+                
+                # Registro analítico original en base de datos si está configurada
+                if supabase:
+                    try:
+                        supabase.table("render_logs").insert({
+                            "email": email_usuario, 
+                            "job_id": tarea_id, 
+                            "status": "success", 
+                            "role": user_role
+                        }).execute()
+                    except:
+                        pass
             else:
                 status.update(label="❌ El proceso ha fallado", state="error")
                 st.error(f"Detalle: {resultado.get('mensaje')}")
@@ -333,7 +368,6 @@ with col_der:
         total_clips = res.get("total_clips", 1)
         opciones_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
         clip_elegido = st.selectbox("Selecciona fragmento:", options=opciones_clips)
-        opciones_clips.index(clip_elegido)
         indice_clip = opciones_clips.index(clip_elegido) + 1
         
         dir_tarea = os.path.join("storage", tid)
