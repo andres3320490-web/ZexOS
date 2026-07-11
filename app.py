@@ -2,8 +2,22 @@ import os
 import streamlit as st
 import requests
 import time
+import subprocess
 from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
+
+# =========================================================================
+# 🚀 INICIADOR AUTOMÁTICO DE BACKEND HÍBRIDO INTERNO
+# =========================================================================
+if "backend_inicializado" not in st.session_state:
+    # Lanza FastAPI en segundo plano en el puerto local 8000
+    subprocess.Popen(["uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"])
+    st.session_state.backend_inicializado = True
+    time.sleep(2)  # Tiempo de gracia para que levante la API
+
+# Comunicación local directa dentro del mismo contenedor
+BACKEND_BASE_URL = "http://127.0.0.1:8000"
+# =========================================================================
 
 st.set_page_config(
     page_title="ZexOS AI Studio Enterprise",
@@ -12,15 +26,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inicializar el controlador de cookies premium
 controller = CookieController()
 
-# Conexión Segura al clúster de Base de Datos
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- INYECCIÓN DE INTERFAZ HORIZONTAL PREMIUM ---
 st.markdown("""
     <style>
     .stApp { background-color: #07090e; color: #E2E8F0; }
@@ -50,13 +61,6 @@ st.markdown("""
     .pro-box { background-color: #121620; border: 2px dashed #deff9a; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
-
-# =========================================================================
-# 🌐 URL CORRECTA Y DINÁMICA DEL BACKEND (SIN CORRECCIÓN .STATIC)
-# =========================================================================
-# Se elimina '.static' para que Hugging Face permita el flujo dinámico de peticiones
-# Coloca aquí tu usuario de Hugging Face seguido de un guion y el nombre del space
-BACKEND_BASE_URL = "https://vzex-zexiastudio.static.hf.space"
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
@@ -185,7 +189,6 @@ with col_derecha:
                     "diccionario_manual": diccionario_manual
                 }
                 
-                # Envío de peticiones HTTP POST con barra al final para FastAPI
                 if video_subido:
                     archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
                     r = requests.post(f"{BACKEND_BASE_URL}/procesar/", files=archivos, data=datos_formulario, timeout=(10, 600))
@@ -218,12 +221,12 @@ with col_derecha:
                     
                     if estado in ["processing", "pending", "queued"]:
                         with placeholder_monitor.container():
-                            st.markdown("#### ⚙️ Pipeline de Ejecución de IA:")
+                            st.markdown("#### ⚙️ Pipeline de Execution de IA:")
                             for i, fase in enumerate(fases_ia):
-                                if i == 0:
+                                if i == 0 and estado == "processing":
                                     st.markdown(f'<div class="clip-card processing"><span>🔄 <b>Fase 1:</b> {fase}</span><span style="color:#3b82f6; font-weight:bold;">Procesando...</span></div><div class="skeleton-loader"></div>', unsafe_allow_html=True)
-                                elif i == 1:
-                                    st.markdown(f'<div class="clip-card locked"><span>🔒 <b>Fase 2:</b> {fase}</span></div>', unsafe_allow_html=True)
+                                elif i == 0:
+                                    st.markdown(f'<div class="clip-card processing"><span>⏳ <b>En cola:</b> {fase}</span></div>', unsafe_allow_html=True)
                                 else:
                                     st.markdown(f'<div class="clip-card locked"><span>🔒 <b>Fase {i+1}:</b> {fase}</span></div>', unsafe_allow_html=True)
                                     
@@ -244,6 +247,7 @@ with col_derecha:
                                     st.video(res_download.content)
                                     st.download_button(label=f"📥 Descargar {clip_elegido}", data=res_download.content, file_name=f"clip_{indice_clip}.mp4", mime="video/mp4")
                         break
+                        
                     elif estado == "failed":
                         st.error(f"❌ Error en procesamiento: {info_tarea.get('error')}")
                         break
