@@ -1,6 +1,6 @@
 # app.py
 import os
-import streamlit st as st
+import streamlit as st
 import requests
 from moviepy import VideoFileClip
 from supabase import create_client, Client
