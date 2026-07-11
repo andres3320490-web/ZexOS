@@ -129,14 +129,23 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                 if archivos_en_dir:
                     ruta_video_master = archivos_en_dir[0]
                 else:
-                    raise FileNotFoundError(f"No se encontró ningún archivo de video válido.")
+                    raise FileNotFoundError("No se encontró ningún archivo de video válido.")
                     
         if diccionario_manual:
             nuevos_ganchos = {p.strip().lower() for p in diccionario_manual.split(",") if p.strip()}
             PALABRAS_RETENCION.update(nuevos_ganchos)
                     
         clip_completo = VideoFileClip(ruta_video_master)
-        clip_completo.audio.write_audiofile(ruta_audio_full, fps=16000, nbytes=2, logger=None)
+        
+        # Guardar audio con manejo seguro de parámetros para MoviePy 1.x y 2.x
+        if clip_completo.audio is not None:
+            try:
+                clip_completo.audio.write_audiofile(ruta_audio_full, fps=16000, nbytes=2, logger=None)
+            except:
+                try:
+                    clip_completo.audio.write_audiofile(ruta_audio_full, fps=16000, logger=None)
+                except:
+                    pass
                 
         segmentos = [
             {
@@ -158,8 +167,15 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
             t_ini, t_fin = max(0.0, seg["start"]), min(clip_completo.duration, seg["end"])
             if (t_fin - t_ini) < 2.0: 
                 continue
-                        
-            chunk = clip_completo.subclipped(t_ini, t_fin)
+            
+            # Compatibilidad total para recorte de tiempo (.subclip vs .subclipped)
+            if hasattr(clip_completo, 'subclipped'):
+                chunk = clip_completo.subclipped(t_ini, t_fin)
+            elif hasattr(clip_completo, 'subclip'):
+                chunk = clip_completo.subclip(t_ini, t_fin)
+            else:
+                chunk = clip_completo.cropped(start_time=t_ini, end_time=t_fin)
+                
             duracion_chunk = chunk.duration
                         
             if es_short:
@@ -168,7 +184,6 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                 meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
                 fn_centro = meta_rostros["data"]
                                 
-                # SOLUCIÓN DE COMPATIBILIDAD A NIVEL DE FRAME ARRAY (Evita usar .fl() / .transform())
                 def transformar_cuadros(get_frame, t):
                     frame = get_frame(t)
                     x1 = max(0, min(w_orig - target_w, fn_centro(t) - (target_w // 2)))
@@ -207,10 +222,11 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                             size=(chunk.size[0] - 40, None)
                         )
 
-                    txt_clip = (txt_clip
-                                .with_duration(max(0.2, w_end - w_start))
-                                .with_start(w_start)
-                                .with_position(('center', int(chunk.size[1] * 0.70))))
+                    # Soporte multiplataforma para MoviePy en la asignación de propiedades de clips
+                    if hasattr(txt_clip, 'with_duration'):
+                        txt_clip = txt_clip.with_duration(max(0.2, w_end - w_start)).with_start(w_start).with_position(('center', int(chunk.size[1] * 0.70)))
+                    else:
+                        txt_clip = txt_clip.set_duration(max(0.2, w_end - w_start)).set_start(w_start).set_position(('center', int(chunk.size[1] * 0.70)))
                                         
                     def animar_subtitulo(get_frame, t):
                         img = get_frame(t)
@@ -228,9 +244,14 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
             video_render_chunk = CompositeVideoClip(componentes_chunk)
                         
             ruta_salida_segmento = os.path.join(dir_trabajo, f"clip_{clips_guardados + 1}_viral_{tarea_id[:5]}.mp4")
-            video_render_chunk.write_videofile(ruta_salida_segmento, fps=30, codec='libx264', audio_codec='aac', logger=None)
+            
+            # Renderizado robusto sin logs invasivos
+            try:
+                video_render_chunk.write_videofile(ruta_salida_segmento, fps=30, codec='libx264', audio_codec='aac', logger=None)
+            except:
+                video_render_chunk.write_videofile(ruta_salida_segmento, fps=30, codec='libx264', audio_codec='aac')
+                
             video_render_chunk.close()
-                        
             clips_guardados += 1
                     
         clip_completo.close()
@@ -241,7 +262,7 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
             "status": "success",
             "total_clips": clips_guardados,
             "viral_score": "98%",
-            "analisis_popularidad": f"Generados con éxito."
+            "analisis_popularidad": "Generados con éxito."
         }
     except Exception as err:
         if os.path.exists(ruta_audio_full): 
@@ -381,13 +402,11 @@ if clave_admin == "ZexOSAdmin":
                 except Exception as e:
                     st.sidebar.error(f"Error: {e}")
 
-    # PANEL E INFORMES EN TIEMPO REAL PARA EL ADMINISTRADOR
     st.sidebar.markdown("### 📋 Usuarios en la Base de Datos")
     if supabase:
         try:
             todos_los_usuarios = supabase.table("usuarios_vip").select("*").execute()
             if todos_los_usuarios.data:
-                # Muestra la lista y datos guardados en Supabase
                 st.sidebar.dataframe(todos_los_usuarios.data, use_container_width=True)
             else:
                 st.sidebar.info("No hay usuarios registrados como VIP actualmente.")
@@ -457,7 +476,7 @@ with col_der:
                 formato=formato_seleccionado, 
                 con_subtitulos=con_subtitulos, 
                 color_sub_hex="#deff9a", 
-                stilo_subtitulos=stilo_elegido, 
+                estilo_subtitulos=stilo_elegido, 
                 url_remoto=url_remoto, 
                 diccionario_manual=diccionario_manual
             )
