@@ -279,10 +279,10 @@ cookie_controller.set("zexos_user_email", email_usuario)
 user_role = "normal"
 payment_status = "Pendiente / Gratuito"
 
-# REGLA MAESTRA: Si el correo es el de PayPal del propietario, forzar VIP/Admin inmediatamente
+# REGLA MAESTRA: Si el correo es tu dirección principal
 if email_usuario.lower() == "andres3320490@gmail.com":
-    user_role = "vip"
-    payment_status = "Cuenta Maestra Verificada (PayPal Integrado)"
+    user_role = "admin"
+    payment_status = "Cuenta Propietaria Maestra"
 else:
     if supabase:
         try:
@@ -298,7 +298,45 @@ if email_usuario.endswith("@zexos.ai") or email_usuario in ["admin@zexos.com"]:
     user_role = "admin"
     payment_status = "Cuenta Corporativa Interna Activa"
 
-# Render de UI según rol corregido
+# =========================================================================
+# 🔐 CONSOLA DE ADMINISTRACIÓN (LLAVE: ZexOSAdmin)
+# =========================================================================
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔒 Consola de Control")
+clave_admin = st.sidebar.text_input("Clave de Acceso Root:", type="password")
+
+if clave_admin == "ZexOSAdmin":
+    st.sidebar.success("🔑 Acceso Concedido")
+    user_role = "admin"  # Eleva temporalmente los privilegios del panel actual
+    
+    st.sidebar.markdown("### 👥 Gestionar Roles VIP")
+    target_mail = st.sidebar.text_input("Correo del Usuario:", placeholder="usuario@gmail.com").strip()
+    
+    col_add, col_del = st.sidebar.columns(2)
+    
+    if supabase and target_mail:
+        with col_add:
+            if st.button("➕ Dar VIP"):
+                try:
+                    # Verifica si ya existe para no duplicar
+                    check = supabase.table("usuarios_vip").select("*").eq("email", target_mail).execute()
+                    if not check.data:
+                        supabase.table("usuarios_vip").insert({"email": target_mail}).execute()
+                        st.sidebar.success(f"¡{target_mail} ahora es VIP!")
+                    else:
+                        st.sidebar.warning("Ya tiene VIP activo.")
+                except Exception as e:
+                    st.sidebar.error(f"Error: {e}")
+                    
+        with col_del:
+            if st.button("➖ Quitar VIP"):
+                try:
+                    supabase.table("usuarios_vip").delete().eq("email", target_mail).execute()
+                    st.sidebar.success(f"VIP removido a: {target_mail}")
+                except Exception as e:
+                    st.sidebar.error(f"Error: {e}")
+
+# Render de UI final según nivel de acceso determinado
 if user_role == "admin":
     st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
     st.caption(f"💳 Estado Financiero: {payment_status}")
@@ -314,7 +352,6 @@ else:
     
     st.sidebar.markdown("---")
     st.sidebar.info("⭐ ¿Quieres procesar más tiempo?")
-    # Enlace de cobro configurado con tu cuenta provista
     PAYPAL_ME_URL = "https://www.paypal.com/paypalme/andres3320490" 
     st.sidebar.markdown(f'<a href="{PAYPAL_ME_URL}" target="_blank" class="paypal-btn">💳 Obtener VIP con PayPal</a>', unsafe_allow_html=True)
 
