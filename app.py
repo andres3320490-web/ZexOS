@@ -12,6 +12,12 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- NOTA TÉCNICA: Recuerda que para admitir archivos de hasta 4GB en un servidor
+# propio o VPS, se debe definir en el archivo `.streamlit/config.toml`:
+# [server]
+# maxUploadSize = 4096
+# ---------------------------------------------------------------------------
+
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -66,7 +72,6 @@ else:
     email_usuario = email_usuario.lower()
 
 try:
-    # Descargamos los datos para buscar de forma segura en Python
     respuesta = supabase.table("usuarios_vip").select("*").execute()
     if respuesta.data:
         lista_usuarios_cruda = respuesta.data
@@ -93,19 +98,15 @@ if es_admin:
     </div>
     """, unsafe_allow_html=True)
     
-    # Punto 1: Métricas rápidas
     total_vip = len(lista_usuarios_cruda)
     st.sidebar.metric(label="👥 Total Clientes VIP Activos", value=total_vip)
     
-    # Punto 2: Lista de correos registrados en la DB
     st.sidebar.markdown("**📍 1. Monitor de Usuarios VIP:**")
     for idx, fila in enumerate(lista_usuarios_cruda):
-        # Extrae los valores de texto de la fila (los correos electrónicos)
         correos = [val for val in fila.values() if "@" in str(val)]
         correo_mostrar = correos[0] if correos else f"ID {idx+1}"
         st.sidebar.text(f"• {correo_mostrar}")
         
-    # Punto 3: Registro Rápido Informativo
     st.sidebar.markdown("**📍 2. Sistema de Control:**")
     st.sidebar.caption("Para dar de alta nuevos clientes que paguen por PayPal, ingresa directamente a tu dashboard web de Supabase.")
     
@@ -130,7 +131,6 @@ if not es_premium_o_vip:
     </div>
     """, unsafe_allow_html=True)
     
-    # Formulario HTML estándar de PayPal para pagos rápidos
     paypal_html_btn = f"""
     <div class="paypal-container">
         <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_blank">
@@ -146,7 +146,6 @@ if not es_premium_o_vip:
     """
     st.sidebar.html(paypal_html_btn)
     
-    # Mensaje de aclaración sobre el tiempo de activación manual
     st.sidebar.info("⏳ **Activación del servicio:** Tras completar tu pago en PayPal, el estado Pro se validará y activará en tu cuenta en un lapso máximo de **24 horas**.")
     st.sidebar.markdown("---")
 
@@ -155,18 +154,30 @@ st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
 
-# Límite estricto de 120 minutos para la cuenta free
 if not es_premium_o_vip:
-    st.warning("⚠️ **Capa Free Activa:** Límite estricto de **120 minutos** por video.")
+    st.warning("⚠️ **Capa Free Activa:** Límite de **120 minutos** por video. Peso máx: **2 GB**.")
 else:
     if es_admin:
-        st.success("⚡ **Modo Root Activo:** Entorno de pruebas sin restricciones de renderizado.")
+        st.success("⚡ **Modo Root Activo:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
     else:
-        st.success("⚡ **Capa PRO Desbloqueada:** Renders ilimitados activos.")
+        st.success("⚡ **Capa PRO Desbloqueada:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
 
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
 
 if video_subido:
+    # --- ASIGNACIÓN DE LÍMITES DE PESO ---
+    peso_archivo_bytes = video_subido.size
+    peso_max_free = 2048 * 1024 * 1024     # 2 GB para usuarios gratuitos en bytes
+    peso_max_premium = 4096 * 1024 * 1024  # 4 GB para VIP/Admin en bytes
+    
+    if not es_premium_o_vip and peso_archivo_bytes > peso_max_free:
+        st.error(f"❌ El archivo pesa {(peso_archivo_bytes / (1024*1024)):.1f} MB. Has superado el límite de 2 GB de la cuenta gratuita.")
+        st.info("💡 **SaaS Lock:** Adquiere el Plan Pro en la barra lateral para expandir tu límite hasta los **4 GB**.")
+        st.stop()
+    elif es_premium_o_vip and peso_archivo_bytes > peso_max_premium:
+        st.error(f"❌ El archivo supera los 4 GB permitidos para cuentas VIP ({ (peso_archivo_bytes / (1024*1024*1024)):.2f} GB detectados).")
+        st.stop()
+        
     path_temporal = "validando_duracion.mp4"
     with open(path_temporal, "wb") as f:
         f.write(video_subido.getvalue())
@@ -177,12 +188,11 @@ if video_subido:
         clip_prueba.close()
         if os.path.exists(path_temporal): os.remove(path_temporal)
             
-        st.write(f"⏱️ Duración detectada: `{duracion_real:.2f} segundos`")
+        st.write(f"⏱️ Duración detectada: `{duracion_real:.2f} segundos` | Peso: `{ (peso_archivo_bytes / (1024*1024)):.1f} MB`")
         
         # 7200.0 segundos equivalen exactamente a 120 minutos
         if duracion_real > 7200.0 and not es_premium_o_vip:
             st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de 120 minutos de la cuenta gratuita.")
-            st.info("💡 **SaaS Lock:** Utiliza el botón de PayPal en la barra lateral para adquirir tu suscripción.")
         else:
             st.success("✅ Estructura multimedia óptima para el renderizado.")
             col_preview, col_render = st.columns([1, 1])
@@ -192,11 +202,11 @@ if video_subido:
             with col_render:
                 st.subheader("Orquestación Cloud")
                 if st.button("EJECUTAR COMPILACIÓN"):
-                    with st.spinner("Procesando en la nube con IA..."):
+                    with st.spinner("Procesando en la nube con IA... (Archivos grandes pueden demorar varios minutos)"):
                         try:
                             archivos_envio = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
                             datos_formulario = {"formato": formato_seleccionado, "con_subtitulos": str(con_subtitulos).lower()}
-                            respuesta = requests.post(BACKEND_API_URL, files=archivos_envio, data=datos_formulario, timeout=600)
+                            respuesta = requests.post(BACKEND_API_URL, files=archivos_envio, data=datos_formulario, timeout=1200) # Timeout de 20 minutos
                             if respuesta.status_code == 200:
                                 st.balloons()
                                 st.subheader("Resultado Final")
@@ -205,7 +215,7 @@ if video_subido:
                             else:
                                 st.error(f"Error en el servidor de IA: {respuesta.text}")
                         except Exception as e:
-                            st.error(f"Error de red: {str(e)}")
+                            st.error(f"Error de red o de transferencia: {str(e)}")
     except Exception as e:
         st.error(f"Error al procesar el archivo: {str(e)}")
         if os.path.exists(path_temporal): os.remove(path_temporal)
