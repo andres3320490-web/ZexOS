@@ -14,6 +14,7 @@ st.set_page_config(
 
 controller = CookieController()
 
+# Conexión a Base de Datos Supabase
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -47,6 +48,20 @@ st.markdown("""
     .pro-box { background-color: #121620; border: 2px dashed #deff9a; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
+
+# =========================================================================
+# 🌐 DETECCIÓN Y ESTRUCTURACIÓN DINÁMICA DE LA URL DE HUGGING FACE (100% FUNCIONAL)
+# =========================================================================
+# CONFIGURACIÓN: Cambia esto por el nombre exacto de tu Space del backend si es diferente
+BACKEND_SPACE_NAME = "vzex-zexiastudio" 
+
+# El script autodetecta si está en local o en producción en la nube de HF
+if "SPACE_ID" in os.environ:
+    # Si está en producción, genera la URL directa y dinámica usando el protocolo seguro
+    BACKEND_BASE_URL = f"https://{BACKEND_SPACE_NAME}.hf.space"
+else:
+    # Si estás probando localmente
+    BACKEND_BASE_URL = "http://localhost:7860"
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
@@ -175,12 +190,12 @@ with col_derecha:
                     "diccionario_manual": diccionario_manual
                 }
                 
-                # Peticiones con RUTAS RELATIVAS estrictas
+                # Petición estructurada con URL absoluta segura e inyección de barra final
                 if video_subido:
                     archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
-                    r = requests.post("/procesar/", files=archivos, data=datos_formulario, timeout=(10, 600))
+                    r = requests.post(f"{BACKEND_BASE_URL}/procesar/", files=archivos, data=datos_formulario, timeout=(10, 600))
                 else:
-                    r = requests.post("/procesar/", data=datos_formulario, timeout=(10, 600))
+                    r = requests.post(f"{BACKEND_BASE_URL}/procesar/", data=datos_formulario, timeout=(10, 600))
                     
                 if r.status_code == 200:
                     st.session_state.tarea_id = r.json().get("tarea_id")
@@ -201,7 +216,7 @@ with col_derecha:
         
         while True:
             try:
-                check_r = requests.get(f"/estado/{tarea_id}/", timeout=5)
+                check_r = requests.get(f"{BACKEND_BASE_URL}/estado/{tarea_id}/", timeout=5)
                 if check_r.status_code == 200:
                     info_tarea = check_r.json()
                     estado = info_tarea.get("status")
@@ -220,7 +235,7 @@ with col_derecha:
                     elif estado == "completed":
                         placeholder_monitor.empty()
                         st.balloons()
-                        st.markdown('<div class="clip-card unlocked"><span>✅ <b>¡Clips listos!</b></span></div>', unsafe_allow_html=True)
+                        st.markdown('<div class="clip-card unlocked"><span>✅ <b>¡Clips ready en el nodo!</b></span></div>', unsafe_allow_html=True)
                         
                         total_clips = info_tarea.get("total_clips", 1)
                         opciones_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
@@ -229,7 +244,7 @@ with col_derecha:
                         
                         if st.button(f"🔍 Verificar {clip_elegido}"):
                             with st.spinner("Cargando clip..."):
-                                res_download = requests.get(f"/descargar/{tarea_id}/?clip_num={indice_clip}")
+                                res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}/?clip_num={indice_clip}")
                                 if res_download.status_code == 200:
                                     st.video(res_download.content)
                                     st.download_button(label=f"📥 Descargar {clip_elegido}", data=res_download.content, file_name=f"clip_{indice_clip}.mp4", mime="video/mp4")
