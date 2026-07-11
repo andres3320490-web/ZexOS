@@ -33,6 +33,9 @@ st.markdown("""
         justify-content: center;
         margin-top: 10px;
     }
+    .admin-box {
+        background-color: #1a1018; border: 1px solid #ff007f; padding: 10px; border-radius: 8px; margin-bottom: 15px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,27 +45,38 @@ st.title("🚀 ZexOS AI Studio Core")
 
 # --- PASO 0: IDENTIFICACIÓN DE USUARIO ---
 st.subheader("📥 Identificación de Usuario")
-email_usuario = st.text_input("Introduce tu correo electrónico para iniciar el entorno:", placeholder="ejemplo@correo.com").strip().lower()
+email_usuario = st.text_input("Introduce tu correo electrónico para iniciar el entorno:", placeholder="ejemplo@correo.com o Clave Admin").strip()
 
 if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN DE RANGO ---
+# --- VERIFICACIÓN DE RANGO / ADMIN ---
 es_premium_o_vip = False
+es_admin = False
 rango_usuario = "Gratuito"
+lista_usuarios_cruda = []
+
+if email_usuario == "ZexOSAdmin":
+    es_admin = True
+    es_premium_o_vip = True
+    rango_usuario = "Administrador Principal 🛠️"
+    email_usuario = "admin@zexos.com"
+else:
+    email_usuario = email_usuario.lower()
 
 try:
-    # Descargamos los datos para buscar el correo directamente en Python de forma segura
+    # Descargamos los datos para buscar de forma segura en Python
     respuesta = supabase.table("usuarios_vip").select("*").execute()
     if respuesta.data:
-        # Buscamos en cada fila si el correo coincide con algún valor registrado
-        for fila in respuesta.data:
-            valores = [str(val).strip().lower() for val in fila.values()]
-            if email_usuario in valores:
-                es_premium_o_vip = True
-                rango_usuario = "VIP / Premium Ilimitado 💎"
-                break
+        lista_usuarios_cruda = respuesta.data
+        if not es_admin:
+            for fila in respuesta.data:
+                valores = [str(val).strip().lower() for val in fila.values()]
+                if email_usuario in valores:
+                    es_premium_o_vip = True
+                    rango_usuario = "VIP / Premium Ilimitado 💎"
+                    break
 except Exception as e:
     st.warning(f"Aviso de Red: {str(e)}")
 
@@ -70,6 +84,34 @@ except Exception as e:
 st.sidebar.markdown(f"**Usuario:** `{email_usuario}`")
 st.sidebar.markdown(f"**Rango:** `{rango_usuario}`")
 st.sidebar.markdown("---")
+
+# --- PANEL EXCLUSIVO DE ADMINISTRADOR (3 PUNTOS DE CONTROL) ---
+if es_admin:
+    st.sidebar.markdown("""
+    <div class="admin-box">
+        <span style="color: #ff007f; font-weight: bold;">⚡ CONSOLA DE ADMINISTRACIÓN</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Punto 1: Métricas rápidas
+    total_vip = len(lista_usuarios_cruda)
+    st.sidebar.metric(label="👥 Total Clientes VIP Activos", value=total_vip)
+    
+    # Punto 2: Lista de correos registrados en la DB
+    st.sidebar.markdown("**📍 1. Monitor de Usuarios VIP:**")
+    for idx, fila in enumerate(lista_usuarios_cruda):
+        # Extrae los valores de texto de la fila (los correos electrónicos)
+        correos = [val for val in fila.values() if "@" in str(val)]
+        correo_mostrar = correos[0] if correos else f"ID {idx+1}"
+        st.sidebar.text(f"• {correo_mostrar}")
+        
+    # Punto 3: Registro Rápido Informativo
+    st.sidebar.markdown("**📍 2. Sistema de Control:**")
+    st.sidebar.caption("Para dar de alta nuevos clientes que paguen por PayPal, ingresa directamente a tu dashboard web de Supabase.")
+    
+    st.sidebar.markdown("**📍 3. Estado de la Red:**")
+    st.sidebar.success("Conexión con Supabase: ONLINE")
+    st.sidebar.markdown("---")
 
 
 # =========================================================================
@@ -113,11 +155,14 @@ st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
 
-# Actualizado el aviso visual del límite a 120 minutos
+# Límite estricto de 120 minutos para la cuenta free
 if not es_premium_o_vip:
     st.warning("⚠️ **Capa Free Activa:** Límite estricto de **120 minutos** por video.")
 else:
-    st.success("⚡ **Capa PRO Desbloqueada:** Renders ilimitados activos.")
+    if es_admin:
+        st.success("⚡ **Modo Root Activo:** Entorno de pruebas sin restricciones de renderizado.")
+    else:
+        st.success("⚡ **Capa PRO Desbloqueada:** Renders ilimitados activos.")
 
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
 
