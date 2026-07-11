@@ -84,7 +84,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BACKEND_BASE_URL = "https://vzex-zexiastudio.hf.space"
+# URL actualizada y corregida para evitar el error 404 de ruteo
+BACKEND_BASE_URL = "https://vzex-zexiastudio.static.hf.space"
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
@@ -116,7 +117,7 @@ if correo_ingresado_limpio != "zexosadmin":
         st.error(f"⛔ **POLÍTICA ANTI-FRAUDE:** Este dispositivo ya está vinculado a la cuenta `{cuenta_vinculada_en_dispositivo}`.")
         st.stop()
         
-    # 2. Validación de Límites por IP vía Supabase (MODIFICADO A 3 CUENTAS MÁXIMO)
+    # 2. Validación de Límites por IP vía Supabase (Habilitado hasta 3 cuentas por IP)
     try:
         res_ip = supabase.table("registro_ips").select("*").eq("ip_address", user_ip).execute()
         cuentas_asociadas = [fila["email"] for fila in res_ip.data] if res_ip.data else []
@@ -240,7 +241,7 @@ with col_derecha:
                     "diccionario_manual": diccionario_manual
                 }
                 
-                timeout_config = (10, 600)  # Configuración robusta para uploads masivos
+                timeout_config = (10, 600)  # Configuración para subidas masivas
 
                 if video_subido:
                     archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
