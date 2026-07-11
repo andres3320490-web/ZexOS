@@ -1,5 +1,3 @@
 ffmpeg
 libsm6
 libxext6
-libjpeg-dev
-zlib1g-dev
