@@ -84,8 +84,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# URL actualizada y corregida para evitar el error 404 de ruteo
-BACKEND_BASE_URL = "https://vzex-zexiastudio.static.hf.space"
+# URL CORREGIDA: Apunta a la Direct API dinámica sin el subdominio '.static'
+BACKEND_BASE_URL = "https://vzex-zexiastudio.hf.space"
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
@@ -117,7 +117,7 @@ if correo_ingresado_limpio != "zexosadmin":
         st.error(f"⛔ **POLÍTICA ANTI-FRAUDE:** Este dispositivo ya está vinculado a la cuenta `{cuenta_vinculada_en_dispositivo}`.")
         st.stop()
         
-    # 2. Validación de Límites por IP vía Supabase (Habilitado hasta 3 cuentas por IP)
+    # 2. Validación de Límites por IP vía Supabase (MODIFICADO A 3 CUENTAS MÁXIMO)
     try:
         res_ip = supabase.table("registro_ips").select("*").eq("ip_address", user_ip).execute()
         cuentas_asociadas = [fila["email"] for fila in res_ip.data] if res_ip.data else []
@@ -241,13 +241,14 @@ with col_derecha:
                     "diccionario_manual": diccionario_manual
                 }
                 
-                timeout_config = (10, 600)  # Configuración para subidas masivas
+                timeout_config = (10, 600)
 
+                # CORREGIDO: Las rutas ahora terminan en '/' para cumplir con los proxies de Hugging Face
                 if video_subido:
                     archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
-                    r = requests.post(f"{BACKEND_BASE_URL}/procesar", files=archivos, data=datos_formulario, timeout=timeout_config)
+                    r = requests.post(f"{BACKEND_BASE_URL}/procesar/", files=archivos, data=datos_formulario, timeout=timeout_config)
                 else:
-                    r = requests.post(f"{BACKEND_BASE_URL}/procesar", data=datos_formulario, timeout=timeout_config)
+                    r = requests.post(f"{BACKEND_BASE_URL}/procesar/", data=datos_formulario, timeout=timeout_config)
                     
                 if r.status_code == 200:
                     st.session_state.tarea_id = r.json().get("tarea_id")
@@ -271,7 +272,8 @@ with col_derecha:
         
         while True:
             try:
-                check_r = requests.get(f"{BACKEND_BASE_URL}/estado/{tarea_id}", timeout=5)
+                # CORREGIDO: Inclusión del slash final reglamentario para el endpoint de estado
+                check_r = requests.get(f"{BACKEND_BASE_URL}/estado/{tarea_id}/", timeout=5)
                 if check_r.status_code == 200:
                     info_tarea = check_r.json()
                     estado = info_tarea.get("status")
@@ -299,7 +301,8 @@ with col_derecha:
                         
                         if st.button(f"🔍 Cargar y Verificar {clip_elegido}"):
                             with st.spinner("Cargando archivo..."):
-                                res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}?clip_num={indice_clip}")
+                                # CORREGIDO: Endpoint estructurado con barra al final antes de los parámetros
+                                res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}/?clip_num={indice_clip}")
                                 if res_download.status_code == 200:
                                     st.video(res_download.content)
                                     st.download_button(label=f"📥 Descargar {clip_elegido}", data=res_download.content, file_name=f"clip_{indice_clip}.mp4", mime="video/mp4")
