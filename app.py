@@ -85,6 +85,12 @@ BACKEND_BASE_URL = "https://vzex-zexiastudio.hf.space"
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
+# --- OBTENCIÓN DE IP PÚBLICA EN TORNO NUBE ---
+try:
+    user_ip = requests.get("https://api.ipify.org", timeout=5).text.strip()
+except Exception:
+    user_ip = "127.0.0.1"  # Fallback seguro local
+
 # --- CONTROL DE ACCESO E IDENTIFICACIÓN ---
 st.subheader("📥 Identificación de Entorno")
 email_usuario = st.text_input("Correo electrónico corporativo / Clave Acceso:", placeholder="ejemplo@correo.com").strip()
@@ -93,11 +99,47 @@ if not email_usuario:
     st.info("💡 Introduce tus credenciales en la caja superior para desplegar tu espacio de trabajo horizontal.")
     st.stop()
 
-# Lógica dinámica de permisos y rangos
+correo_ingresado_limpio = email_usuario.strip().lower()
+
+# =========================================================================
+# 🔒 MITIGACIÓN AVANZADA: CONTROL DE COOKIES + LÍMITE estricto DE 2 CUENTAS POR IP
+# =========================================================================
+cookies_navegador = st.context.cookies
+cuenta_vinculada_en_dispositivo = cookies_navegador.get("zexos_device_owner")
+
+# Ignoramos validación de fraude si el usuario es el administrador principal
+if correo_ingresado_limpio != "zexosadmin":
+    
+    # 1. Validación cruzada por Cookies del Dispositivo
+    if cuenta_vinculada_en_dispositivo and cuenta_vinculada_en_dispositivo != correo_ingresado_limpio:
+        st.error(f"⛔ **POLÍTICA ANTI-FRAUDE:** Este dispositivo ya está vinculado a la cuenta `{cuenta_vinculada_en_dispositivo}`.")
+        st.stop()
+        
+    # 2. Validación de Límites por IP vía Supabase (Tabla dinámica de control 'registro_ips')
+    try:
+        # Consultar si la IP actual ya registró cuentas
+        res_ip = supabase.table("registro_ips").select("*").eq("ip_address", user_ip).execute()
+        cuentas_asociadas = [fila["email"] for fila in res_ip.data] if res_ip.data else []
+        
+        if correo_ingresado_limpio not in cuentas_asociadas:
+            if len(cuentas_asociadas) >= 2:
+                st.error(f"⛔ **LÍMITE DE IP EXCEDIDO:** Esta dirección IP (`{user_ip}`) ya ha alcanzado el máximo de 2 cuentas permitidas para el plan gratuito. Por favor, accede con una de tus cuentas registradas o adquiere una suscripción.")
+                st.stop()
+            else:
+                # Registrar esta nueva combinación de Cuenta/IP
+                supabase.table("registro_ips").insert({"ip_address": user_ip, "email": correo_ingresado_limpio}).execute()
+    except Exception as e:
+        st.warning(f"⚠️ Validación de IP en modo contingencia (Bypass temporal): {str(e)}")
+
+    # Guardar en cookies si el dispositivo estaba limpio
+    if not cuenta_vinculada_en_dispositivo:
+        st.context.cookies["zexos_device_owner"] = correo_ingresado_limpio
+        st.rerun()
+
+# --- LÓGICA DINÁMICA DE PERMISOS ---
 es_premium_o_vip = False
 es_admin = False
 rango_usuario = "Gratuito"
-correo_ingresado_limpio = email_usuario.strip().lower()
 
 if correo_ingresado_limpio == "zexosadmin":
     es_admin = True
@@ -119,6 +161,7 @@ except Exception as e:
 
 # --- CONFIGURACIÓN EN BARRA LATERAL (SIDEBAR DASHBOARD STYLE) ---
 st.sidebar.markdown(f"### 👤 Perfil: `{email_usuario}`")
+st.sidebar.markdown(f"**IP Rastreada:** `{user_ip}`")
 st.sidebar.markdown(f"**Rango Actual:** {rango_usuario}")
 st.sidebar.markdown("---")
 
@@ -155,7 +198,6 @@ with col_izquierda:
     st.subheader("📥 Carga de Material Audiovisual")
     url_remoto = st.text_input("🔗 Enlace Directo (YouTube, Twitch VOD, Reels, TikTok):", placeholder="https://www.youtube.com/watch?v=...").strip()
     
-    # ---- ASIGNACIÓN DINÁMICA DE LÍMITES COMERCIALES ----
     if es_premium_o_vip:
         limite_texto = "Soporte de Carga VIP: Máximo 4GB por archivo (Límite Ampliado) 💎"
     else:
@@ -165,19 +207,18 @@ with col_izquierda:
     video_subido = st.file_uploader(
         "O arrastra tu archivo multimedia local aquí:", 
         type=["mp4", "mkv", "mov"],
-        help=f"La tasa de transferencia de este entorno acepta hasta {limite_texto}. Gobernado bajo las directivas del archivo config.toml"
+        help=f"La tasa de transferencia acepta hasta {limite_texto}."
     )
     
-    # --- VALIDACIÓN DEL TAMAÑO EN EL FRONTEND ANTES DE SUBIR ---
+    # --- VALIDACIÓN DEL TAMAÑO ---
     bloquear_envio = False
     if video_subido is not None:
-        # Convertir bytes a Gigabytes (1 GB = 1024 * 1024 * 1024 bytes)
         tamanio_gb = video_subido.size / (1024 * 1024 * 1024)
         if not es_premium_o_vip and tamanio_gb > 2.0:
-            st.error(f"⛔ ¡Acceso Denegado! Tu archivo pesa {tamanio_gb:.2f} GB. El plan gratuito solo permite hasta 2 GB. Por favor, adquiere el plan VIP.")
+            st.error(f"⛔ ¡Acceso Denegado! Tu archivo pesa {tamanio_gb:.2f} GB. El plan gratuito solo permite hasta 2 GB.")
             bloquear_envio = True
         elif es_premium_o_vip and tamanio_gb > 4.0:
-            st.error(f"⛔ ¡Límite Excedido! Incluso las cuentas VIP tienen un tope máximo de 4 GB por infraestructura. Tu archivo pesa {tamanio_gb:.2f} GB.")
+            st.error(f"⛔ ¡Límite Excedido! Las cuentas VIP tienen un tope máximo de 4 GB. Tu archivo pesa {tamanio_gb:.2f} GB.")
             bloquear_envio = True
 
     boton_procesar = st.button("🚀 INICIAR PROCESAMIENTO HÍBRIDO", disabled=bloquear_envio)
@@ -213,11 +254,10 @@ with col_derecha:
             except Exception as e:
                 st.error(f"Error crítico de red: {str(e)}")
 
-    # --- POLLING LOOP AVANZADO CON SKELETON LOADERS ---
+    # --- POLLING LOOP CON SKELETON LOADERS ---
     if "tarea_id" in st.session_state:
         tarea_id = st.session_state.tarea_id
         placeholder_monitor = st.empty()
-        
         fases_ia = [
             "Aislamiento de silencios y frecuencias de voz con Whisper",
             "Análisis adaptativo VTuber / Tracker facial OpenCV predictivo",
@@ -246,36 +286,23 @@ with col_derecha:
                     elif estado == "completed":
                         placeholder_monitor.empty()
                         st.balloons()
+                        st.markdown('<div class="clip-card unlocked"><span>✅ <b>¡Parrilla Multi-Clip Compilada con Éxito!</b></span></div>', unsafe_allow_html=True)
                         
-                        st.markdown('<div class="clip-card unlocked"><span>✅ <b>¡Parrilla Multi-Clip Compilada con Éxito!</b></span><span style="color:#deff9a; font-weight:bold;">Listo</span></div>', unsafe_allow_html=True)
-                        st.metric(label="📊 Curation Viral Score Promedio", value=info_tarea.get("viral_score", "95%"))
-                        
-                        # --- INTERFAZ DE REPRODUCTOR INDEPENDIENTE ---
                         total_clips = info_tarea.get("total_clips", 1)
-                        st.markdown("### 🎬 Selector de Shorts Disponibles:")
-                        
                         opciones_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
                         clip_elegido = st.selectbox("Selecciona qué fragmento deseas procesar:", options=opciones_clips)
                         indice_clip = opciones_clips.index(clip_elegido) + 1
                         
                         if st.button(f"🔍 Cargar y Verificar {clip_elegido}"):
-                            with st.spinner("Cargando archivo desde la Grid..."):
+                            with st.spinner("Cargando archivo..."):
                                 res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}?clip_num={indice_clip}")
                                 if res_download.status_code == 200:
                                     st.video(res_download.content)
-                                    st.download_button(
-                                        label=f"📥 Descargar {clip_elegido} a Local", 
-                                        data=res_download.content, 
-                                        file_name=f"zexos_short_{tarea_id[:5]}_clip_{indice_clip}.mp4", 
-                                        mime="video/mp4"
-                                    )
-                                else:
-                                    st.error("❌ No se pudo extraer este clip específico del clúster de almacenamiento.")
+                                    st.download_button(label=f"📥 Descargar {clip_elegido}", data=res_download.content, file_name=f"clip_{indice_clip}.mp4", mime="video/mp4")
                         break
                     elif estado == "failed":
                         st.error(f"❌ Error en clúster: {info_tarea.get('error')}")
                         break
                 time.sleep(4)
-            except Exception as e:
-                st.error(f"Reconectando con el servidor central: {str(e)}")
+            except Exception:
                 break
