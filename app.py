@@ -1,6 +1,6 @@
 # app.py
 import os
-import streamlit as st
+import streamlit st as st
 import requests
 from moviepy import VideoFileClip
 from supabase import create_client, Client
@@ -27,6 +27,11 @@ st.markdown("""
     }
     .pro-box {
         background-color: #121620; border: 2px dashed #deff9a; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px;
+    }
+    .paypal-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -60,7 +65,15 @@ st.sidebar.markdown(f"**Usuario:** `{email_usuario}`")
 st.sidebar.markdown(f"**Rango:** `{rango_usuario}`")
 st.sidebar.markdown("---")
 
-# --- PASO 3: ENLACE DE PAGO SEGURO ---
+
+# =========================================================================
+# ✅ CORREO CONFIGURADO PARA RECIBIR TUS PAGOS DIRECTOS
+# =========================================================================
+CORREO_PAYPAL = "andres3320490@gmail.com"
+# =========================================================================
+
+
+# --- PASO 3: ENLACE DE PAGO DIRECTO A PAYPAL ---
 if not es_premium_o_vip:
     st.sidebar.markdown("""
     <div class="pro-box">
@@ -69,11 +82,24 @@ if not es_premium_o_vip:
     </div>
     """, unsafe_allow_html=True)
     
-    # URL Base (Cámbiala por tu link de Lemon Squeezy cuando lo tengas)
-    url_pago_base = "https://www.google.com" 
-    url_con_checkout_seguro = f"{url_pago_base}?checkout[email]={email_usuario}"
+    # Formulario HTML estándar de PayPal para pagos rápidos
+    paypal_html_btn = f"""
+    <div class="paypal-container">
+        <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_blank">
+            <input type="hidden" name="cmd" value="_xclick">
+            <input type="hidden" name="business" value="{CORREO_PAYPAL}">
+            <input type="hidden" name="item_name" value="ZexOS AI Studio - Plan Pro (Usuario: {email_usuario})">
+            <input type="hidden" name="amount" value="10.00">
+            <input type="hidden" name="currency_code" value="USD">
+            <input type="hidden" name="no_shipping" value="1">
+            <input type="image" src="https://www.paypalobjects.com/webstatic/en_US/i/buttons/checkout-logo-medium.png" border="0" name="submit" alt="PayPal - The safer, easier way to pay online!">
+        </form>
+    </div>
+    """
+    st.sidebar.html(paypal_html_btn)
     
-    st.sidebar.link_button("⭐ PAGAR CON TARJETA (1 MES)", url_con_checkout_seguro)
+    # Mensaje de aclaración sobre el tiempo de activación manual
+    st.sidebar.info("⏳ **Activación del servicio:** Tras completar tu pago en PayPal, el estado Pro se validará y activará en tu cuenta en un lapso máximo de **24 horas**.")
     st.sidebar.markdown("---")
 
 # --- PROCESAMIENTO MULTIMEDIA ---
@@ -103,7 +129,7 @@ if video_subido:
         
         if duracion_real > 60.0 and not es_premium_o_vip:
             st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de la cuenta gratuita.")
-            st.markdown(f"💡 **SaaS Lock:** [Haz clic aquí para activar tu suscripción e introducir tu tarjeta]({url_con_checkout_seguro})")
+            st.info("💡 **SaaS Lock:** Utiliza el botón de PayPal en la barra lateral para adquirir tu suscripción.")
         else:
             st.success("✅ Estructura multimedia óptima para el renderizado.")
             col_preview, col_render = st.columns([1, 1])
@@ -128,4 +154,5 @@ if video_subido:
                         except Exception as e:
                             st.error(f"Error de red: {str(e)}")
     except Exception as e:
-        st.error(f"Error analizando video: {str(e)}")                
+        st.error(f"Error al procesar el archivo: {str(e)}")
+        if os.path.exists(path_temporal): os.remove(path_temporal)
