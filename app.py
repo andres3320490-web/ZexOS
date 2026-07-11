@@ -16,7 +16,7 @@ SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Estilos Cyberpunk
+# Estilos Cyberpunk y truco CSS para ocultar el límite por defecto de 200MB de Streamlit
 st.markdown("""
     <style>
     .stApp { background-color: #0A0D14; color: #E2E8F0; }
@@ -36,6 +36,10 @@ st.markdown("""
     .admin-box {
         background-color: #1a1018; border: 1px solid #ff007f; padding: 10px; border-radius: 8px; margin-bottom: 15px;
     }
+    /* Oculta la etiqueta por defecto de límite de tamaño (200MB per file) para evitar confusiones */
+    [data-testid="stFileUploaderDropzone"] small {
+        display: none !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -51,33 +55,36 @@ if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN DE RANGO / ADMIN (SOLUCIÓN DEFINITIVA VIP) ---
+# --- VERIFICACIÓN DE RANGO / ADMIN (BÚSQUEDA BLINDADA) ---
 es_premium_o_vip = False
 es_admin = False
 rango_usuario = "Gratuito"
 lista_usuarios_cruda = []
 
-if email_usuario == "ZexOSAdmin":
+# Limpieza profunda del correo ingresado por el usuario
+correo_limpio_usuario = email_usuario.strip().lower()
+
+if correo_limpio_usuario == "zexosadmin":
     es_admin = True
     es_premium_o_vip = True
     rango_usuario = "Administrador Principal 🛠️"
     email_usuario = "admin@zexos.com"
-else:
-    email_usuario = email_usuario.lower()
 
 try:
-    # Solución definitiva: Descargamos los datos y buscamos el correo barriendo los valores de la fila
-    # Esto ignora si la columna se llama "email", "correo electrónico" o "correo"
     respuesta = supabase.table("usuarios_vip").select("*").execute()
     if respuesta.data:
         lista_usuarios_cruda = respuesta.data
         if not es_admin:
             for fila in respuesta.data:
-                # Convertimos todos los valores de las columnas a texto limpio en minúsculas
-                valores_fila = [str(val).strip().lower() for val in fila.values()]
-                if email_usuario in valores_fila:
-                    es_premium_o_vip = True
-                    rango_usuario = "VIP / Premium Ilimitado 💎"
+                # Extraemos y limpiamos absolutamente todos los textos de la fila en la base de datos
+                for clave, valor in fila.items():
+                    valor_limpio = str(valor).strip().lower()
+                    # Si el correo del usuario coincide con cualquier campo o parte de él
+                    if correo_limpio_usuario == valor_limpio or correo_limpio_usuario in valor_limpio:
+                        es_premium_o_vip = True
+                        rango_usuario = "VIP / Premium Ilimitado 💎"
+                        break
+                if es_premium_o_vip:
                     break
 except Exception as e:
     st.warning(f"Aviso de Red: {str(e)}")
@@ -151,7 +158,6 @@ st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
 
-# Nuevas funciones de personalización manual solicitadas
 fuente_seleccionada = "Impact"
 color_seleccionado = "#FFFFFF"
 
@@ -171,6 +177,7 @@ else:
     else:
         st.success("⚡ **Capa PRO Desbloqueada:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
 
+# Subidor de archivos con el texto nativo removido por CSS
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
 
 if video_subido:
@@ -212,7 +219,6 @@ if video_subido:
                         try:
                             archivos_envio = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
                             
-                            # Enviamos también las fuentes y colores seleccionados al backend de Hugging Face
                             datos_formulario = {
                                 "formato": formato_seleccionado, 
                                 "con_subtitulos": str(con_subtitulos).lower(),
