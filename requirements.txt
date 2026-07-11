@@ -4,5 +4,6 @@ supabase
 streamlit-cookies-controller
 numpy
 opencv-python-headless
+torch --index-url https://download.pytorch.org/whl/cpu
 moviepy>=2.0.0
 yt-dlp
