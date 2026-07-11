@@ -16,7 +16,7 @@ SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Estilos Cyberpunk y truco CSS para ocultar el límite por defecto de 200MB de Streamlit
+# Estilos Cyberpunk y truco CSS para forzar la ocultación del texto molesto por defecto de Streamlit
 st.markdown("""
     <style>
     .stApp { background-color: #0A0D14; color: #E2E8F0; }
@@ -36,9 +36,15 @@ st.markdown("""
     .admin-box {
         background-color: #1a1018; border: 1px solid #ff007f; padding: 10px; border-radius: 8px; margin-bottom: 15px;
     }
-    /* Oculta la etiqueta por defecto de límite de tamaño (200MB per file) para evitar confusiones */
-    [data-testid="stFileUploaderDropzone"] small {
+    
+    /* Forzado estricto para remover cualquier texto de límite automático de Streamlit que cause confusión */
+    [data-testid="stFileUploaderDropzone"] small, 
+    [data-testid="stFileUploaderDropzone"] div span {
         display: none !important;
+    }
+    /* Volvemos a hacer visible únicamente el texto principal del botón de carga */
+    [data-testid="stFileUploaderDropzone"] button span {
+        display: inline-block !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -89,7 +95,7 @@ try:
                     # Comparamos si coincide exactamente o si el valor ingresado está contenido dentro del campo
                     if correo_ingresado_limpio == texto_columna or (len(correo_ingresado_limpio) > 3 and correo_ingresado_limpio in texto_columna):
                         es_premium_o_vip = True
-                        rango_usuario = "VIP 💎"  # Modificado a petición para mostrar solo VIP
+                        rango_usuario = "VIP 💎"
                         break
                 if es_premium_o_vip:
                     break
@@ -186,6 +192,12 @@ else:
 
 # Subidor de archivos
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
+
+# --- MODIFICACIÓN ADICIONAL AQUÍ: TEXTOS DINÁMICOS DE LÍMITES BAJO EL BOTÓN ---
+if not es_premium_o_vip:
+    st.caption("📋 Límite actual: **2 GB por archivo** | 💡 _¿Sabías que los usuarios VIP tienen soporte expandido de hasta **4 GB**?_")
+else:
+    st.caption("🚀 Estatus VIP Activo: Límite expandido desbloqueado con éxito de hasta **4 GB por archivo**.")
 
 if video_subido:
     peso_archivo_bytes = video_subido.size
