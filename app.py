@@ -13,12 +13,10 @@ import streamlit as st
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-# Sintaxis de MoviePy v2 corregida
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
 
-# Intentar importar el worker desde tasks.py externo si existe
 try:
     from tasks import async_render_worker
 except ImportError:
@@ -87,7 +85,7 @@ async def descargar_clip(tarea_id: str, clip_num: int = 1):
     return FileResponse(os.path.join(dir_tarea, archivos[0]), media_type="video/mp4")
 
 # =========================================================================
-# 🚀 2. INICIALIZADOR DE LA API DE FONDO (UVICORN)
+# 🚀 2. INICIALIZADOR DE LA API DE FONDO
 # =========================================================================
 def run_fastapi():
     import uvicorn
