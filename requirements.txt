@@ -1,12 +1,12 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.1+cpu
 opencv-python-headless
-streamlit
 fastapi
 uvicorn
 requests
 supabase
 streamlit-cookies-controller
 numpy
-torch
 yt-dlp
 whisper-timestamped
 moviepy
