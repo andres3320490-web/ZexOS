@@ -5,51 +5,37 @@ import requests
 from moviepy import VideoFileClip
 from supabase import create_client, Client
 
-# 1. Configuración de pantalla con estética SaaS Premium
+# 1. Configuración de pantalla
 st.set_page_config(
     page_title="ZexOS AI Studio Enterprise",
     page_icon="⚡",
     layout="wide"
 )
 
-# Conexión Segura con tu Base de Datos Supabase
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
-
-# Inicializamos el cliente de la base de datos
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Estilo Cyberpunk Flúor + Estilo personalizado para el botón PRO
+# Estilos Cyberpunk
 st.markdown("""
     <style>
     .stApp { background-color: #0A0D14; color: #E2E8F0; }
     h1, h2, h3, .stMarkdown strong { color: #deff9a !important; }
-    
-    /* Botón general */
     .stButton>button { 
         width: 100%; background-color: #deff9a !important; color: #0A0D14 !important; 
         font-weight: bold !important; border-radius: 8px !important; border: none !important;
-        box-shadow: 0px 4px 15px rgba(222, 255, 154, 0.3);
     }
-    
-    /* Caja contenedora para la compra del plan */
     .pro-box {
-        background-color: #121620; 
-        border: 2px dashed #deff9a; 
-        padding: 15px; 
-        border-radius: 8px; 
-        text-align: center;
-        margin-bottom: 20px;
+        background-color: #121620; border: 2px dashed #deff9a; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# URL de tu motor de IA en Hugging Face
 BACKEND_API_URL = "https://vzex-zexiastudio.hf.space/procesar"
 
-st.title("🚀 ZexOS AI Studio Core — Cloud SaaS Engine")
+st.title("🚀 ZexOS AI Studio Core")
 
-# --- PASO 0: IDENTIFICACIÓN DIRECTA SIN CONTRASEÑA ---
+# --- PASO 0: IDENTIFICACIÓN DE USUARIO ---
 st.subheader("📥 Identificación de Usuario")
 email_usuario = st.text_input("Introduce tu correo electrónico para iniciar el entorno:", placeholder="ejemplo@correo.com").strip().lower()
 
@@ -57,50 +43,48 @@ if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN AUTOMÁTICA DE RANGO ---
+# --- VERIFICACIÓN DE RANGO ---
 es_premium_o_vip = False
 rango_usuario = "Gratuito"
 
 try:
     respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
-    if len(respuesta.data) > 0:
+    if respuesta.data and len(respuesta.data) > 0:
         es_premium_o_vip = True
         rango_usuario = "VIP / Premium Ilimitado 💎"
 except Exception:
-    st.error("Error de conexión con el nodo de base de datos.")
+    st.warning("Aviso: Nodo de base de datos en espera.")
 
-# --- BARRA LATERAL (ESTRUCTURA NUEVA) ---
-st.sidebar.markdown(f"**Usuario Activo:** `{email_usuario}`")
-st.sidebar.markdown(f"**Rango de Cuenta:** `{rango_usuario}`")
+# --- BARRA LATERAL ---
+st.sidebar.markdown(f"**Usuario:** `{email_usuario}`")
+st.sidebar.markdown(f"**Rango:** `{rango_usuario}`")
 st.sidebar.markdown("---")
 
-# SI EL USUARIO ES GRATUITO, LE MUESTRA EL CUADRO DESTACADO PARA PASARSE A PRO
+# --- PASO 3: ENLACE DE PAGO SEGURO ---
 if not es_premium_o_vip:
     st.sidebar.markdown("""
     <div class="pro-box">
         <span style="font-size: 18px;">💎 <b>PLAN PRO SAAS</b></span><br>
-        <span style="color: #deff9a; font-size: 22px; font-weight: bold;">$10.00 / mes</span><br>
-        <p style="font-size: 12px; color: #A0AEC0; margin-top: 5px;">Desbloquea renders de hasta 2 horas, sin esperas y soporte prioritario.</p>
+        <span style="color: #deff9a; font-size: 22px; font-weight: bold;">$10.00 / mes</span>
     </div>
     """, unsafe_allow_html=True)
     
-    # Aquí pegas el link de Lemon Squeezy que copiaste en el Paso 1
-    # Añadiendo '?embed=1' al final del enlace, Lemon Squeezy sabe que debe abrir el cuadro flotante sobre la web
-    url_pago_lemon = "https://www.google.com"
+    # URL Base (Cámbiala por tu link de Lemon Squeezy cuando lo tengas)
+    url_pago_base = "https://www.google.com" 
+    url_con_checkout_seguro = f"{url_pago_base}?checkout[email]={email_usuario}"
     
-    st.sidebar.link_button("⭐ ADQUIRIR 1 MES PRO NOW", url_pago_lemon)
+    st.sidebar.link_button("⭐ PAGAR CON TARJETA (1 MES)", url_con_checkout_seguro)
     st.sidebar.markdown("---")
 
+# --- PROCESAMIENTO MULTIMEDIA ---
 st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
 
-# --- PANEL DE SUBIDA ---
-st.markdown("---")
 if not es_premium_o_vip:
     st.warning("⚠️ **Capa Free Activa:** Límite estricto de **60 segundos** por video.")
 else:
-    st.success("⚡ **Capa PRO Desbloqueada:** Tienes acceso ilimitado sin restricciones de tiempo.")
+    st.success("⚡ **Capa PRO Desbloqueada:** Renders ilimitados activos.")
 
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
 
@@ -119,16 +103,13 @@ if video_subido:
         
         if duracion_real > 60.0 and not es_premium_o_vip:
             st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de la cuenta gratuita.")
-            if not es_premium_o_vip:
-                st.markdown(f"💡 **¿Quieres renderizar este video?** [Haz clic aquí para activar el Plan Pro]({url_pago_lemon}) e introduce tu tarjeta para continuar.")
+            st.markdown(f"💡 **SaaS Lock:** [Haz clic aquí para activar tu suscripción e introducir tu tarjeta]({url_con_checkout_seguro})")
         else:
             st.success("✅ Estructura multimedia óptima para el renderizado.")
-            
             col_preview, col_render = st.columns([1, 1])
             with col_preview:
                 st.subheader("Source Preview")
                 st.video(video_subido)
-                
             with col_render:
                 st.subheader("Orquestación Cloud")
                 if st.button("EJECUTAR COMPILACIÓN"):
@@ -136,9 +117,7 @@ if video_subido:
                         try:
                             archivos_envio = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
                             datos_formulario = {"formato": formato_seleccionado, "con_subtitulos": str(con_subtitulos).lower()}
-                            
                             respuesta = requests.post(BACKEND_API_URL, files=archivos_envio, data=datos_formulario, timeout=600)
-                            
                             if respuesta.status_code == 200:
                                 st.balloons()
                                 st.subheader("Resultado Final")
@@ -149,4 +128,4 @@ if video_subido:
                         except Exception as e:
                             st.error(f"Error de red: {str(e)}")
     except Exception as e:
-        st.error(f"Error analizando video: {str(e)}")
+        st.error(f"Error analizando video: {str(e)}")                
