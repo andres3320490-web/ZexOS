@@ -233,7 +233,7 @@ if SUPABASE_URL and SUPABASE_KEY:
 cookie_controller = CookieController()
 
 # =========================================================================
-# 🎨 INTERFAZ DE USUARIO CON ROLES ORIGINALES (ADMIN, VIP, NORMAL)
+# 🎨 INTERFAZ DE USUARIO CON ROLES CORREGIDOS SEGÚN TU TABLA (usuarios_vip)
 # =========================================================================
 st.markdown("""
     <style>
@@ -243,6 +243,22 @@ st.markdown("""
     .badge-admin { background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
     .badge-vip { background-color: #eab308; color: black; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
     .badge-normal { background-color: #3b82f6; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
+    
+    .paypal-btn {
+        display: block;
+        width: 100%;
+        background-color: #ffc439 !important;
+        color: #003087 !important;
+        font-family: 'Inter', sans-serif;
+        font-weight: bold;
+        text-align: center;
+        padding: 10px 0px;
+        border-radius: 8px;
+        text-decoration: none;
+        margin-top: 10px;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.2);
+    }
+    .paypal-btn:hover { background-color: #f2ba36 !important; text-decoration: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -260,28 +276,26 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
+# Lógica de comprobación exacta contra tu tabla "usuarios_vip"
 user_role = "normal"
 payment_status = "Pendiente / Gratuito"
 
 if supabase:
     try:
-        res = supabase.table("usuarios").select("*").eq("email", email_usuario).execute()
-        if res.data:
-            user_role = res.data[0].get("role", "normal")
-            payment_status = "Verificado en Base de Datos"
-        else:
-            supabase.table("usuarios").insert({"email": email_usuario, "role": "normal"}).execute()
+        # Consultamos en tu tabla real "usuarios_vip" filtrando por la columna "email"
+        res = supabase.table("usuarios_vip").select("*").eq("email", email_usuario).execute()
+        if res.data and len(res.data) > 0:
+            user_role = "vip"
+            payment_status = "Verificado en Base de Datos (usuarios_vip)"
     except Exception:
         pass
 
-# Fallbacks y reglas de dominios internos
+# Fallback por reglas maestras de administradores internos de zexos
 if email_usuario.endswith("@zexos.ai") or email_usuario in ["admin@zexos.com"]:
     user_role = "admin"
     payment_status = "Cuenta Corporativa Interna Activa"
-elif "vip" in email_usuario.lower() or email_usuario.endswith("@premium.com"):
-    user_role = "vip"
-    payment_status = "Suscripción Premium Verificada"
 
+# Render de UI y límites basado en la verificación correcta de la BD
 if user_role == "admin":
     st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
     st.caption(f"💳 Estado Financiero: {payment_status}")
@@ -297,20 +311,8 @@ else:
     
     st.sidebar.markdown("---")
     st.sidebar.info("⭐ ¿Quieres procesar más tiempo?")
-    
-    # Inyección nativa del Token de Stripe provisto por el usuario
-    if st.sidebar.button("💳 Desbloquear VIP con Stripe"):
-        if supabase:
-            try:
-                # Simula la pasarela de Stripe actualizando el rol de Supabase automáticamente
-                supabase.table("usuarios").update({"role": "vip"}).eq("email", email_usuario).execute()
-                st.sidebar.success("✅ ¡Pago procesado! Reiniciando sesión como VIP...")
-                time.sleep(1)
-                st.rerun()
-            except Exception as e:
-                st.sidebar.error(f"Error al asignar rol VIP: {e}")
-        else:
-            st.sidebar.warning(f"Entorno Sandbox Activado con la clave: {STRIPE_PUBLISHABLE_KEY[:15]}...")
+    PAYPAL_ME_URL = "https://www.paypal.me/tu_usuario_o_link_de_cobro" 
+    st.sidebar.markdown(f'<a href="{PAYPAL_ME_URL}" target="_blank" class="paypal-btn">💳 Obtener VIP con PayPal</a>', unsafe_allow_html=True)
 
 st.sidebar.markdown(f"**Límite del Plan:** {int(limite_tiempo_max)} segundos por Clip.")
 
@@ -351,7 +353,7 @@ with col_der:
                 formato=formato_seleccionado, 
                 con_subtitulos=con_subtitulos, 
                 color_sub_hex="#deff9a", 
-                estilo_subtitulos=stilo_elegido, 
+                stilo_subtitulos=stilo_elegido, 
                 url_remoto=url_remoto, 
                 diccionario_manual=diccionario_manual
             )
@@ -359,17 +361,6 @@ with col_der:
             if resultado.get("status") == "success":
                 status.update(label="⚡ ¡Procesamiento Completado con Éxito!", state="complete", expanded=False)
                 st.session_state.resultado_tarea = resultado
-                
-                if supabase:
-                    try:
-                        supabase.table("render_logs").insert({
-                            "email": email_usuario, 
-                            "job_id": tarea_id, 
-                            "status": "success", 
-                            "role": user_role
-                        }).execute()
-                    except Exception:
-                        pass
             else:
                 status.update(label="❌ El proceso ha fallado", state="error")
                 st.error(f"Detalle: {resultado.get('mensaje')}")
