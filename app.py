@@ -1,9 +1,10 @@
-# app.py
 import os
 import streamlit as st
 import requests
 import time
 from supabase import create_client, Client
+# 1. Importar el controlador de cookies
+from streamlit_cookies_controller import CookieController
 
 st.set_page_config(
     page_title="ZexOS AI Studio Enterprise",
@@ -11,6 +12,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Inicializar el controlador de cookies
+controller = CookieController()
 
 # Conexión Segura al clúster de Base de Datos
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
@@ -104,8 +108,8 @@ correo_ingresado_limpio = email_usuario.strip().lower()
 # =========================================================================
 # 🔒 MITIGACIÓN AVANZADA: CONTROL DE COOKIES + LÍMITE estricto DE 2 CUENTAS POR IP
 # =========================================================================
-cookies_navegador = st.context.cookies
-cuenta_vinculada_en_dispositivo = cookies_navegador.get("zexos_device_owner")
+# 2. Leer la cookie usando el controlador en lugar de st.context.cookies
+cuenta_vinculada_en_dispositivo = controller.get("zexos_device_owner")
 
 # Ignoramos validación de fraude si el usuario es el administrador principal
 if correo_ingresado_limpio != "zexosadmin":
@@ -133,7 +137,8 @@ if correo_ingresado_limpio != "zexosadmin":
 
     # Guardar en cookies si el dispositivo estaba limpio
     if not cuenta_vinculada_en_dispositivo:
-        st.context.cookies["zexos_device_owner"] = correo_ingresado_limpio
+        # 3. Guardar la cookie de forma correcta usando el método set()
+        controller.set("zexos_device_owner", correo_ingresado_limpio)
         st.rerun()
 
 # --- LÓGICA DINÁMICA DE PERMISOS ---
@@ -305,4 +310,4 @@ with col_derecha:
                         break
                 time.sleep(4)
             except Exception:
-                break
+                pass
