@@ -139,6 +139,7 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
             if (t_fin - t_ini) < 2.0: 
                 continue
                         
+            # Solución definitiva para MoviePy v2
             chunk = clip_completo.subclipped(t_ini, t_fin)
             duracion_chunk = chunk.duration
                         
@@ -217,7 +218,7 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
         return {"status": "error", "mensaje": str(err)}
 
 # =========================================================================
-# 🗄️ RESTAURACIÓN DE CONEXIÓN ORIGINAL A SUPABASE Y COOKIES
+# 🗄️ CONEXIÓN DE TU VERSIÓN ORIGINAL A SUPABASE Y COOKIES
 # =========================================================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
