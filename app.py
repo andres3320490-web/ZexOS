@@ -233,7 +233,7 @@ if SUPABASE_URL and SUPABASE_KEY:
 cookie_controller = CookieController()
 
 # =========================================================================
-# 🎨 INTERFAZ DE USUARIO CON ROLES CORREGIDOS SEGÚN TU TABLA (usuarios_vip)
+# 🎨 INTERFAZ DE USUARIO
 # =========================================================================
 st.markdown("""
     <style>
@@ -276,26 +276,29 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-# Lógica de comprobación exacta contra tu tabla "usuarios_vip"
 user_role = "normal"
 payment_status = "Pendiente / Gratuito"
 
-if supabase:
-    try:
-        # Consultamos en tu tabla real "usuarios_vip" filtrando por la columna "email"
-        res = supabase.table("usuarios_vip").select("*").eq("email", email_usuario).execute()
-        if res.data and len(res.data) > 0:
-            user_role = "vip"
-            payment_status = "Verificado en Base de Datos (usuarios_vip)"
-    except Exception:
-        pass
+# REGLA MAESTRA: Si el correo es el de PayPal del propietario, forzar VIP/Admin inmediatamente
+if email_usuario.lower() == "andres3320490@gmail.com":
+    user_role = "vip"
+    payment_status = "Cuenta Maestra Verificada (PayPal Integrado)"
+else:
+    if supabase:
+        try:
+            res = supabase.table("usuarios_vip").select("*").eq("email", email_usuario).execute()
+            if res.data and len(res.data) > 0:
+                user_role = "vip"
+                payment_status = "Verificado en Base de Datos (usuarios_vip)"
+        except Exception:
+            pass
 
-# Fallback por reglas maestras de administradores internos de zexos
+# Fallback por dominios corporativos adicionales
 if email_usuario.endswith("@zexos.ai") or email_usuario in ["admin@zexos.com"]:
     user_role = "admin"
     payment_status = "Cuenta Corporativa Interna Activa"
 
-# Render de UI y límites basado en la verificación correcta de la BD
+# Render de UI según rol corregido
 if user_role == "admin":
     st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
     st.caption(f"💳 Estado Financiero: {payment_status}")
@@ -311,7 +314,8 @@ else:
     
     st.sidebar.markdown("---")
     st.sidebar.info("⭐ ¿Quieres procesar más tiempo?")
-    PAYPAL_ME_URL = "https://www.paypal.me/tu_usuario_o_link_de_cobro" 
+    # Enlace de cobro configurado con tu cuenta provista
+    PAYPAL_ME_URL = "https://www.paypal.com/paypalme/andres3320490" 
     st.sidebar.markdown(f'<a href="{PAYPAL_ME_URL}" target="_blank" class="paypal-btn">💳 Obtener VIP con PayPal</a>', unsafe_allow_html=True)
 
 st.sidebar.markdown(f"**Límite del Plan:** {int(limite_tiempo_max)} segundos por Clip.")
@@ -353,7 +357,7 @@ with col_der:
                 formato=formato_seleccionado, 
                 con_subtitulos=con_subtitulos, 
                 color_sub_hex="#deff9a", 
-                stilo_subtitulos=stilo_elegido, 
+                estilo_subtitulos=stilo_elegido, 
                 url_remoto=url_remoto, 
                 diccionario_manual=diccionario_manual
             )
