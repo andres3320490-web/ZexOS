@@ -13,9 +13,11 @@ st.set_page_config(
 )
 
 # Conexión Segura con tu Base de Datos Supabase
-# REEMPLAZA ESTOS VALORES CON LOS TUYOS DE SUPABASE
-SUPABASE_URL = "TU_PROJECT_URL_DE_SUPABASE"
-SUPABASE_KEY = "TU_API_KEY_DE_SUPABASE"
+# ⚠️ ADVERTENCIA: Reemplaza "TU_PROJECT_URL_AQUÍ" con tu enlace de Supabase (ej: https://xxxx.supabase.co)
+SUPABASE_URL = "TU_PROJECT_URL_AQUÍ"
+SUPABASE_KEY = "sb_publisible_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
+
+# Inicializamos el cliente de la base de datos de manera segura
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Estilo Cyberpunk Flúor
@@ -58,7 +60,7 @@ try:
         es_premium_o_vip = True
         rango_usuario = "VIP / Premium Ilimitado 💎"
 except Exception:
-    st.error("Error temporal de conexión con el nodo de base de datos.")
+    st.error("Error temporal de conexión con el nodo de base de datos. Verifica que tu SUPABASE_URL sea correcta.")
 
 st.sidebar.markdown(f"**Usuario Activo:** `{email_usuario}`")
 st.sidebar.markdown(f"**Rango de Cuenta:** `{rango_usuario}`")
@@ -136,4 +138,3 @@ if video_subido:
                             st.error(f"Error de red: {str(e)}")
     except Exception as e:
         st.error(f"Error analizando video: {str(e)}")
-        if os.path.exists(path_temporal): os.remove(path_temporal)
