@@ -55,35 +55,41 @@ if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN DE RANGO / ADMIN (BÚSQUEDA BLINDADA) ---
+# --- VERIFICACIÓN DE RANGO / ADMIN (SISTEMA DE COINCIDENCIA BLINDADA) ---
 es_premium_o_vip = False
 es_admin = False
 rango_usuario = "Gratuito"
 lista_usuarios_cruda = []
 
-# Limpieza profunda del correo ingresado por el usuario
-correo_limpio_usuario = email_usuario.strip().lower()
+# Limpiamos por completo el correo que escribe el usuario en la pantalla
+correo_ingresado_limpio = email_usuario.strip().lower()
 
-if correo_limpio_usuario == "zexosadmin":
+if correo_ingresado_limpio == "zexosadmin":
     es_admin = True
     es_premium_o_vip = True
     rango_usuario = "Administrador Principal 🛠️"
     email_usuario = "admin@zexos.com"
 
 try:
+    # Traemos los datos de Supabase
     respuesta = supabase.table("usuarios_vip").select("*").execute()
     if respuesta.data:
         lista_usuarios_cruda = respuesta.data
+        
+        # Si no es el administrador, ejecutamos el escaneo inteligente de correos
         if not es_admin:
             for fila in respuesta.data:
-                # Extraemos y limpiamos absolutamente todos los textos de la fila en la base de datos
+                # Buscamos en cada columna de la fila actual
                 for clave, valor in fila.items():
-                    valor_limpio = str(valor).strip().lower()
-                    # Si el correo del usuario coincide con cualquier campo o parte de él
-                    if correo_limpio_usuario == valor_limpio or correo_limpio_usuario in valor_limpio:
-                        es_premium_o_vip = True
-                        rango_usuario = "VIP / Premium Ilimitado 💎"
-                        break
+                    texto_columna = str(valor).strip().lower()
+                    
+                    # Filtro inteligente: Validamos si este campo de la celda es un correo (contiene '@')
+                    if "@" in texto_columna:
+                        # Si las letras y números coinciden exactamente con lo puesto al inicio
+                        if correo_ingresado_limpio == texto_columna:
+                            es_premium_o_vip = True
+                            rango_usuario = "VIP / Premium Ilimitado 💎"
+                            break
                 if es_premium_o_vip:
                     break
 except Exception as e:
@@ -177,7 +183,7 @@ else:
     else:
         st.success("⚡ **Capa PRO Desbloqueada:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
 
-# Subidor de archivos con el texto nativo removido por CSS
+# Subidor de archivos
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
 
 if video_subido:
