@@ -6,7 +6,8 @@ supabase
 streamlit-cookies-controller
 numpy
 opencv-python-headless
+Pillow>=10.0.0
 torch --index-url https://download.pytorch.org/whl/cpu
 yt-dlp
 openai-whisper
-moviepy==2.1.1
+moviepy>=2.0.0
