@@ -17,7 +17,7 @@ from streamlit_cookies_controller import CookieController
 # =========================================================================
 # ⚙️ MÓDULO DE PROCESAMIENTO COMPLETO E INTEGRADO (tasks.py integrado)
 # =========================================================================
-DISPOSITIVO = "cuda" if torch.torch.cuda.is_available() else "cpu"
+DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
 EMOJI_DICTIONARY = {
     "dinero": "💰",
@@ -66,9 +66,7 @@ def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fi
     fotogramas_totales = int((t_fin - t_inicio) * fps)
     registro_rostros = []
     
-    # Solución al error: Validamos de forma estricta si CascadeClassifier está disponible
     detector_disponible = hasattr(cv2, 'CascadeClassifier')
-    
     cascade_humano = None
     cascade_anime = None
     
@@ -170,11 +168,16 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                 meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
                 fn_centro = meta_rostros["data"]
                                 
-                def crop_frame_dinamico(gf, t):
-                    f = gf(t)
+                # SOLUCIÓN DE COMPATIBILIDAD A NIVEL DE FRAME ARRAY (Evita usar .fl() / .transform())
+                def transformar_cuadros(get_frame, t):
+                    frame = get_frame(t)
                     x1 = max(0, min(w_orig - target_w, fn_centro(t) - (target_w // 2)))
-                    return f[:, x1:x1 + target_w]
-                chunk = chunk.fl(crop_frame_dinamico, keep_duration=True)
+                    return frame[:, x1:x1 + target_w]
+                
+                if hasattr(chunk, 'transform'):
+                    chunk = chunk.transform(transformar_cuadros)
+                else:
+                    chunk = chunk.with_transform(transformar_cuadros)
                             
             componentes_chunk = [chunk]
                         
@@ -209,10 +212,17 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                                 .with_start(w_start)
                                 .with_position(('center', int(chunk.size[1] * 0.70))))
                                         
-                    txt_clip = txt_clip.fl(
-                        lambda gf, t: cv2.resize(gf(t), (0, 0), fx=(1.1 if t < 0.07 else 1.0), fy=(1.1 if t < 0.07 else 1.0), interpolation=cv2.INTER_LINEAR),
-                        keep_duration=True
-                    )
+                    def animar_subtitulo(get_frame, t):
+                        img = get_frame(t)
+                        if t < 0.07:
+                            return cv2.resize(img, (0, 0), fx=1.1, fy=1.1, interpolation=cv2.INTER_LINEAR)[:img.shape[0], :img.shape[1]]
+                        return img
+                        
+                    if hasattr(txt_clip, 'transform'):
+                        txt_clip = txt_clip.transform(animar_subtitulo)
+                    else:
+                        txt_clip = txt_clip.with_transform(animar_subtitulo)
+                        
                     componentes_chunk.append(txt_clip)
                                 
             video_render_chunk = CompositeVideoClip(componentes_chunk)
@@ -333,7 +343,7 @@ if email_usuario.endswith("@zexos.ai") or email_usuario in ["admin@zexos.com"]:
     payment_status = "Cuenta Corporativa Interna Activa"
 
 # =========================================================================
-# 🔒 CONSOLA DE ADMINISTRACIÓN (LLAVE: ZexOSAdmin)
+# 🔒 CONSOLA DE ADMINISTRACIÓN TOTAL (LLAVE: ZexOSAdmin)
 # =========================================================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔒 Consola de Control")
@@ -371,103 +381,13 @@ if clave_admin == "ZexOSAdmin":
                 except Exception as e:
                     st.sidebar.error(f"Error: {e}")
 
-# =========================================================================
-# ⏱️ ASIGNACIÓN DE TIEMPOS
-# =========================================================================
-if user_role == "admin":
-    st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
-    st.caption(f"💳 Estado Financiero: {payment_status}")
-    limite_tiempo_max = float('inf')
-    texto_limite = "Infinito"
-elif user_role == "vip":
-    st.markdown("Tu nivel de acceso actual es: <span class='badge-vip'>USER VIP PREMIUM</span>", unsafe_allow_html=True)
-    st.caption(f"💳 Estado Financiero: {payment_status}")
-    limite_tiempo_max = 1800.0
-    texto_limite = "30 minutos"
-else:
-    st.markdown("Tu nivel de acceso actual es: <span class='badge-normal'>USUARIO ESTÁNDAR</span>", unsafe_allow_html=True)
-    st.caption(f"⚠️ Estado Financiero: {payment_status}")
-    limite_tiempo_max = 7200.0
-    texto_limite = "120 minutos"
-    
-    st.sidebar.markdown("---")
-    st.sidebar.info("⭐ ¿Quieres acceso Premium?")
-    PAYPAL_ME_URL = "https://www.paypal.com/paypalme/andres3320490" 
-    st.sidebar.markdown(f'<a href="{PAYPAL_ME_URL}" target="_blank" class="paypal-btn">💳 Obtener VIP con PayPal</a>', unsafe_allow_html=True)
-
-st.sidebar.markdown(f"**Límite del Plan:** {texto_limite} por Clip.")
-
-formato_seleccionado = st.sidebar.selectbox("Relación de Aspecto Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
-con_subtitulos = st.sidebar.checkbox("Subtítulos Dinámicos Inteligentes", value=True)
-stilo_elegido = st.sidebar.selectbox("Plantilla Tipográfica", options=["hormozi", "classic_three", "minimal"]) if con_subtitulos else "hormozi"
-diccionario_manual = st.sidebar.text_area("Ganchos prioritarios:", placeholder="VTuber, épico", height=80)
-
-col_izq, col_der = st.columns([1, 1], gap="large")
-
-with col_izq:
-    st.subheader("📥 Carga de Material Audiovisual")
-    url_remoto = st.text_input("🔗 Enlace Directo:", placeholder="https://...").strip()
-    video_subido = st.file_uploader("O sube tu archivo local aquí:", type=["mp4", "mkv"])
-    boton_procesar = st.button("🚀 INICIAR PROCESAMIENTO HÍBRIDO")
-
-with col_der:
-    st.subheader("📊 Monitorización de Clips y Descarga")
-    
-    if boton_procesar:
-        tarea_id = f"job_{uuid.uuid4().hex[:10]}"
-        st.session_state.tarea_id = tarea_id
-        
-        temp_dir = garantizar_entorno_tarea(tarea_id)
-        ruta_input = ""
-        
-        if video_subido:
-            ruta_input = os.path.join(temp_dir, video_subido.name)
-            with open(ruta_input, "wb") as buffer:
-                buffer.write(video_subido.getvalue())
-        
-        with st.status("Procesando video con Inteligencia Artificial...", expanded=True) as status:
-            st.write("⏳ Analizando rostros y aplicando tracking facial adaptativo...")
-            
-            resultado = async_render_worker(
-                tarea_id=tarea_id, 
-                ruta_video_master=ruta_input, 
-                formato=formato_seleccionado, 
-                con_subtitulos=con_subtitulos, 
-                color_sub_hex="#deff9a", 
-                estilo_subtitulos=stilo_elegido, 
-                url_remoto=url_remoto, 
-                diccionario_manual=diccionario_manual
-            )
-            
-            if resultado.get("status") == "success":
-                status.update(label="⚡ ¡Procesamiento Completado con Éxito!", state="complete", expanded=False)
-                st.session_state.resultado_tarea = resultado
+    # PANEL E INFORMES EN TIEMPO REAL PARA EL ADMINISTRADOR
+    st.sidebar.markdown("### 📋 Usuarios en la Base de Datos")
+    if supabase:
+        try:
+            todos_los_usuarios = supabase.table("usuarios_vip").select("*").execute()
+            if todos_los_usuarios.data:
+                # Muestra la lista y datos guardados en Supabase
+                st.sidebar.dataframe(todos_los_usuarios.data, use_container_width=True)
             else:
-                status.update(label="❌ El proceso ha fallado", state="error")
-                st.error(f"Detalle: {resultado.get('mensaje')}")
-
-    if "resultado_tarea" in st.session_state and "tarea_id" in st.session_state:
-        res = st.session_state.resultado_tarea
-        tid = st.session_state.tarea_id
-        
-        st.success("¡Tus clips ya están listos!")
-        total_clips = res.get("total_clips", 1)
-        options_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
-        clip_elegido = st.selectbox("Selecciona fragmento:", options=options_clips)
-        indice_clip = options_clips.index(clip_elegido) + 1
-        
-        dir_tarea = os.path.join("storage", tid)
-        if os.path.exists(dir_tarea):
-            archivos = [f for f in os.listdir(dir_tarea) if f.startswith(f"clip_{indice_clip}_")]
-            if archivos:
-                ruta_clip_final = os.path.join(dir_tarea, archivos[0])
-                with open(ruta_clip_final, "rb") as video_file:
-                    st.video(video_file.read())
-                    
-                with open(ruta_clip_final, "rb") as vf:
-                    st.download_button(
-                        label="📥 Descargar Clip en Alta Definición",
-                        data=vf,
-                        file_name=archivos[0],
-                        mime="video/mp4"
-                    )
+                st.sidebar.info("No hay usuarios registrados como VIP actualmente.")
