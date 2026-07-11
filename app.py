@@ -53,8 +53,8 @@ es_premium_o_vip = False
 rango_usuario = "Gratuito"
 
 try:
-    # Corrección aquí: Cambiado "text" por "*" para seleccionar toda la fila correctamente
-    respuesta = supabase.table("usuarios_vip").select("*").eq("correo electrónico", email_usuario).execute()
+    # Corrección de escape: usamos '"correo electrónico"' con comillas simples y dobles para forzar el nombre exacto de PostgreSql
+    respuesta = supabase.table("usuarios_vip").select("*").filter('"correo electrónico"', "eq", email_usuario).execute()
     if respuesta.data and len(respuesta.data) > 0:
         es_premium_o_vip = True
         rango_usuario = "VIP / Premium Ilimitado 💎"
