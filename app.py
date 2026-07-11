@@ -2,10 +2,10 @@
 import os
 import streamlit as st
 import requests
+import time
 from moviepy import VideoFileClip
 from supabase import create_client, Client
 
-# 1. Configuración de pantalla
 st.set_page_config(
     page_title="ZexOS AI Studio Enterprise",
     page_icon="⚡",
@@ -16,7 +16,6 @@ SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Estilos Cyberpunk y truco CSS para forzar la ocultación del texto molesto por defecto de Streamlit
 st.markdown("""
     <style>
     .stApp { background-color: #0A0D14; color: #E2E8F0; }
@@ -28,32 +27,24 @@ st.markdown("""
     .pro-box {
         background-color: #121620; border: 2px dashed #deff9a; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px;
     }
-    .paypal-container {
-        display: flex;
-        justify-content: center;
-        margin-top: 10px;
-    }
     .admin-box {
         background-color: #1a1018; border: 1px solid #ff007f; padding: 10px; border-radius: 8px; margin-bottom: 15px;
     }
-    
-    /* Forzado estricto para remover cualquier texto de límite automático de Streamlit que cause confusión */
     [data-testid="stFileUploaderDropzone"] small, 
     [data-testid="stFileUploaderDropzone"] div span {
         display: none !important;
     }
-    /* Volvemos a hacer visible únicamente el texto principal del botón de carga */
     [data-testid="stFileUploaderDropzone"] button span {
         display: inline-block !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-BACKEND_API_URL = "https://vzex-zexiastudio.hf.space/procesar"
+BACKEND_BASE_URL = "https://vzex-zexiastudio.hf.space"
 
-st.title("🚀 ZexOS AI Studio Core")
+st.title("🚀 ZexOS AI Studio Core (v110% Pro)")
 
-# --- PASO 0: IDENTIFICACIÓN DE USUARIO ---
+# --- IDENTIFICACIÓN DE USUARIO ---
 st.subheader("📥 Identificación de Usuario")
 email_usuario = st.text_input("Introduce tu correo electrónico para iniciar el entorno:", placeholder="ejemplo@correo.com o Clave Admin").strip()
 
@@ -61,12 +52,10 @@ if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN DE RANGO / ADMIN (SISTEMA DE COINCIDENCIA ABSOLUTA) ---
 es_premium_o_vip = False
 es_admin = False
 rango_usuario = "Gratuito"
 lista_usuarios_cruda = []
-
 correo_ingresado_limpio = email_usuario.strip().lower()
 
 if correo_ingresado_limpio == "zexosadmin":
@@ -77,23 +66,19 @@ if correo_ingresado_limpio == "zexosadmin":
 
 try:
     respuesta = supabase.table("usuarios_vip").select("*").execute()
-    
     if respuesta.data:
         lista_usuarios_cruda = respuesta.data
         if not es_admin:
             for fila in respuesta.data:
                 for clave, valor in fila.items():
-                    if valor is None:
-                        continue
+                    if valor is None: continue
                     texto_columna = str(valor).strip().lower()
                     if correo_ingresado_limpio == texto_columna or (len(correo_ingresado_limpio) > 3 and correo_ingresado_limpio in texto_columna):
                         es_premium_o_vip = True
                         rango_usuario = "VIP 💎"
                         break
-                if es_premium_o_vip:
-                    break
 except Exception as e:
-    st.warning(f"Aviso de Red: {str(e)}")
+    st.warning(f"Aviso de Red Supabase: {str(e)}")
 
 # --- BARRA LATERAL ---
 st.sidebar.markdown(f"**Usuario:** `{email_usuario}`")
@@ -101,58 +86,35 @@ st.sidebar.markdown(f"**Rango:** `{rango_usuario}`")
 st.sidebar.markdown("---")
 
 if es_admin:
-    st.sidebar.markdown("""
-    <div class="admin-box">
-        <span style="color: #ff007f; font-weight: bold;">⚡ CONSOLA DE ADMINISTRACIÓN</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    total_vip = len(lista_usuarios_cruda)
-    st.sidebar.metric(label="👥 Total Clientes VIP Activos", value=total_vip)
-    
-    st.sidebar.markdown("**📍 1. Monitor de Usuarios VIP:**")
+    st.sidebar.markdown('<div class="admin-box"><span style="color: #ff007f; font-weight: bold;">⚡ CONSOLA DE ADMINISTRACIÓN</span></div>', unsafe_allow_html=True)
+    st.sidebar.metric(label="👥 Total Clientes VIP Activos", value=len(lista_usuarios_cruda))
     for idx, fila in enumerate(lista_usuarios_cruda):
         valores = [str(v) for v in fila.values() if v is not None and str(v).lower() != 'id']
-        correo_mostrar = valores[0] if valores else f"ID {idx+1}"
-        st.sidebar.text(f"• {correo_mostrar}")
-        
-    st.sidebar.markdown("**📍 2. Sistema de Control:**")
-    st.sidebar.caption("Para dar de alta nuevos clientes que paguen por PayPal, ingresa directamente a tu dashboard web de Supabase.")
+        st.sidebar.text(f"• {valores[0] if valores else f'ID {idx+1}'}")
     st.sidebar.markdown("---")
 
-CORREO_PAYPAL = "andres3320490@gmail.com"
-
 if not es_premium_o_vip:
-    st.sidebar.markdown("""
-    <div class="pro-box">
-        <span style="font-size: 18px;">💎 <b>PLAN PRO SAAS</b></span><br>
-        <span style="color: #deff9a; font-size: 22px; font-weight: bold;">$10.00 / mes</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
+    st.sidebar.markdown('<div class="pro-box"><span style="font-size: 18px;">💎 <b>PLAN PRO SAAS</b></span><br><span style="color: #deff9a; font-size: 22px; font-weight: bold;">$10.00 / mes</span></div>', unsafe_allow_html=True)
     paypal_html_btn = f"""
-    <div class="paypal-container">
+    <div style="display: flex; justify-content: center; margin-top: 10px;">
         <form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_blank">
             <input type="hidden" name="cmd" value="_xclick">
-            <input type="hidden" name="business" value="{CORREO_PAYPAL}">
+            <input type="hidden" name="business" value="andres3320490@gmail.com">
             <input type="hidden" name="item_name" value="ZexOS AI Studio - Plan Pro (Usuario: {email_usuario})">
             <input type="hidden" name="amount" value="10.00">
             <input type="hidden" name="currency_code" value="USD">
-            <input type="hidden" name="no_shipping" value="1">
-            <input type="image" src="https://www.paypalobjects.com/webstatic/en_US/i/buttons/checkout-logo-medium.png" border="0" name="submit" alt="PayPal - The safer, easier way to pay online!">
+            <input type="image" src="https://www.paypalobjects.com/webstatic/en_US/i/buttons/checkout-logo-medium.png" border="0" name="submit">
         </form>
     </div>
     """
     st.sidebar.html(paypal_html_btn)
-    st.sidebar.info("⏳ **Activación del servicio:** Tras completar tu pago en PayPal, el estado Pro se validará y activará en tu cuenta en un lapso máximo de **24 horas**.")
     st.sidebar.markdown("---")
 
-# --- CONFIGURACIÓN DE PROCESAMIENTO & ESTILOS SAAS ---
+# --- ENGINE RENDER SPECS ---
 st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
 
-# Incorporación de la selección de plantillas al estilo Opus Clip
 estilo_elegido = "hormozi"
 if con_subtitulos:
     st.sidebar.markdown("**🎨 Diseño de Plantilla (Opus Layout)**")
@@ -162,92 +124,85 @@ if con_subtitulos:
         format_func=lambda x: "🔥 Alex Hormozi Viral" if x == "hormozi" else ("📋 Classic Short Three" if x == "classic_three" else "⚡ Clean Minimal")
     )
 
-if not es_premium_o_vip:
-    st.warning("⚠️ **Capa Free Activa:** Límite de **120 minutos** por video. Peso máx: **2 GB**.")
-else:
-    if es_admin:
-        st.success("⚡ **Modo Root Activo:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
-    else:
-        st.success("⚡ **Capa VIP Desbloqueada:** Subidas Premium Desbloqueadas (**Hasta 4 GB**).")
+# --- PANEL PRINCIPAL DE CARGA ---
+st.subheader("🎬 Carga de Material Audiovisual")
+url_remoto = st.text_input("🔗 Pegar Enlace directo (YouTube, Twitch VOD, Shorts o Reels):", placeholder="https://www.youtube.com/watch?v=...").strip()
+video_subido = st.file_uploader("📥 O arrastra un archivo local si lo prefieres:", type=["mp4", "mkv", "mov"])
 
-# Cargador de archivos
-video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
-
-if not es_premium_o_vip:
-    st.caption("📋 Límite actual: **2 GB por archivo** | 💡 _¿Sabías que los usuarios VIP tienen soporte expandido de hasta **4 GB**?_")
-else:
-    st.caption("🚀 Estatus VIP Activo: Límite expandido desbloqueado con éxito de hasta **4 GB por archivo**.")
-
-if video_subido:
-    peso_archivo_bytes = video_subido.size
-    peso_max_free = 2048 * 1024 * 1024     
-    peso_max_premium = 4096 * 1024 * 1024  
+if video_subido or url_remoto:
+    st.success("🎥 Origen multimedia detectado correctamente.")
+    col_prev, col_editor = st.columns([1, 1])
     
-    if not es_premium_o_vip and peso_archivo_bytes > peso_max_free:
-        st.error(f"❌ El archivo pesa {(peso_archivo_bytes / (1024*1024)):.1f} MB. Has superado el límite de 2 GB de la cuenta gratuita.")
-        st.stop()
-    elif es_premium_o_vip and peso_archivo_bytes > peso_max_premium:
-        st.error(f"❌ El archivo supera los 4 GB permitidos ({ (peso_archivo_bytes / (1024*1024*1024)):.2f} GB detectados).")
-        st.stop()
-        
-    path_temporal = "validando_duracion.mp4"
-    with open(path_temporal, "wb") as f:
-        f.write(video_subido.getvalue())
-        
-    try:
-        clip_prueba = VideoFileClip(path_temporal)
-        duracion_real = clip_prueba.duration
-        clip_prueba.close()
-        if os.path.exists(path_temporal): os.remove(path_temporal)
+    with col_prev:
+        st.subheader("📺 Previsualización del Vídeo")
+        if video_subido:
+            st.video(video_subido)
+        elif url_remoto:
+            st.video(url_remoto)
             
-        st.write(f"⏱️ Duración detectada: `{duracion_real:.2f} segundos` | Peso: `{ (peso_archivo_bytes / (1024*1024)):.1f} MB`")
+    with col_editor:
+        st.subheader("✍️ Editor de Transcripción Manual (Opcional)")
+        st.caption("Si hay jergas de tu canal o nombres raros que quieras asegurar, agrégalos aquí separados por comas para guiar el diccionario de la IA.")
+        diccionario_manual = st.text_area("Ganchos / Correcciones prioritarias:", placeholder="ejemplo: VTuber, ZexOS, clips, épico, brutal", height=100)
         
-        if duracion_real > 7200.0 and not es_premium_o_vip:
-            st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de 120 minutos de la cuenta gratuita.")
-        else:
-            st.success("✅ Estructura multimedia óptima para el renderizado.")
-            col_preview, col_render = st.columns([1, 1])
-            with col_preview:
-                st.subheader("Source Preview")
-                st.video(video_subido)
-            with col_render:
-                st.subheader("Orquestación Cloud")
-                if st.button("EJECUTAR COMPILACIÓN"):
-                    with st.spinner("Procesando en la nube con IA... (Archivos grandes pueden demorar varios minutos)"):
-                        try:
-                            archivos_envio = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
-                            
-                            # Mapeo completo de parámetros enviados al backend de FastAPI
-                            datos_formulario = {
-                                "formato": formato_seleccionado, 
-                                "con_subtitulos": str(con_subtitulos).lower(),
-                                "estilo_subtitulos": estilo_elegido
-                            }
-                            
-                            respuesta = requests.post(BACKEND_API_URL, files=archivos_envio, data=datos_formulario, timeout=1200) 
-                            
-                            if respuesta.status_code == 200:
-                                st.balloons()
+        if st.button("🚀 INICIAR COMPILACIÓN EN SEGUNDO PLANO"):
+            with st.spinner("Enviando orden al clúster de renderizado..."):
+                try:
+                    datos_formulario = {
+                        "formato": formato_seleccionado,
+                        "con_subtitulos": str(con_subtitulos).lower(),
+                        "estilo_subtitulos": estilo_elegido,
+                        "url_remoto": url_remoto,
+                        "diccionario_manual": diccionario_manual
+                    }
+                    
+                    if video_subido:
+                        archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
+                        r = requests.post(f"{BACKEND_BASE_URL}/procesar", files=archivos, data=datos_formulario)
+                    else:
+                        r = requests.post(f"{BACKEND_BASE_URL}/procesar", data=datos_formulario)
+                        
+                    if r.status_code == 200:
+                        tarea_id = r.json().get("tarea_id")
+                        st.info(f"⚙️ Tarea registrada con éxito (`{tarea_id}`). Procesando sin bloquear tu navegador...")
+                        
+                        # --- POLLING LOOP DE ESTADO (Anti-Timeout 504) ---
+                        status_placeholder = st.empty()
+                        bar_progreso = st.progress(0)
+                        
+                        while True:
+                            check_r = requests.get(f"{BACKEND_BASE_URL}/estado/{tarea_id}")
+                            if check_r.status_code == 200:
+                                info_tarea = check_r.json()
+                                estado = info_tarea.get("status")
                                 
-                                # --- SECCIÓN: RENDIMIENTO Y ANÁLISIS DE VIRALIDAD (Métricas extraídas de las cabeceras del backend) ---
-                                st.subheader("🚀 Análisis de Popularidad (Estilo Opus Clip)")
-                                score_viral = respuesta.headers.get("X-Viral-Score", "88%")
-                                detalles_viral = respuesta.headers.get("X-Analisis-Popularidad", "Métricas estables analizadas con éxito.")
-                                
-                                col_score, col_detalles = st.columns([1, 2])
-                                with col_score:
-                                    st.metric(label="🔥 Curation Viral Score", value=score_viral)
-                                with col_detalles:
-                                    st.info(f"**Predicción de Retención:** {detalles_viral}")
-                                
-                                st.markdown("---")
-                                st.subheader("Resultado Final Renderizado")
-                                st.video(respuesta.content)
-                                st.download_button(label="📥 Descargar MP4", data=respuesta.content, file_name=f"zexos_{video_subido.name}", mime="video/mp4")
+                                if estado == "processing":
+                                    status_placeholder.markdown("⏳ **La IA está recortando silencios, reencuadrando caras y animando subtítulos...**")
+                                    bar_progreso.progress(45)
+                                elif estado == "completed":
+                                    status_placeholder.empty()
+                                    bar_progreso.progress(100)
+                                    st.balloons()
+                                    
+                                    # Mostrar resultados
+                                    st.subheader("🔥 ¡Tus Clips Listos para Redes!")
+                                    st.metric(label="📊 Curation Viral Score", value=info_tarea.get("viral_score", "92%"))
+                                    st.success(f"💡 **Análisis:** {info_tarea.get('analisis_popularidad')}")
+                                    
+                                    # Descargar Archivo Compilado definitivo
+                                    res_download = requests.get(f"{BACKEND_BASE_URL}/descargar/{tarea_id}")
+                                    if res_download.status_code == 200:
+                                        st.video(res_download.content)
+                                        st.download_button("📥 Descargar Primer Clip de la Parrilla", data=res_download.content, file_name=f"zexos_short_{tarea_id[:5]}.mp4", mime="video/mp4")
+                                    break
+                                elif estado == "failed":
+                                    st.error(f"❌ Falló el procesamiento: {info_tarea.get('error')}")
+                                    break
                             else:
-                                st.error(f"Error en el servidor de IA: {respuesta.text}")
-                        except Exception as e:
-                            st.error(f"Error de red o de transferencia: {str(e)}")
-    except Exception as e:
-        st.error(f"Error al procesar el archivo: {str(e)}")
-        if os.path.exists(path_temporal): os.remove(path_temporal)
+                                st.error("❌ Se perdió el enlace con el servidor de render.")
+                                break
+                            time.sleep(5)
+                    else:
+                        st.error(f"Error al enviar la orden: {r.text}")
+                except Exception as e:
+                    st.error(f"Error en la llamada de red: {str(e)}")
