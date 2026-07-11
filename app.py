@@ -3,6 +3,7 @@ import shutil
 import uuid
 import time
 import requests
+import datetime
 import numpy as np
 import cv2
 import torch
@@ -16,7 +17,7 @@ from streamlit_cookies_controller import CookieController
 # =========================================================================
 # ⚙️ MÓDULO DE PROCESAMIENTO COMPLETO E INTEGRADO (tasks.py integrado)
 # =========================================================================
-DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
+DISPOSITIVO = "cuda" if torch.torch.cuda.is_available() else "cpu"
 
 EMOJI_DICTIONARY = {
     "dinero": "💰",
@@ -40,7 +41,9 @@ def asegurar_cascade_anime(dir_trabajo: str) -> str:
         try:
             urllib.request.urlretrieve(url, ruta_xml)
         except:
-            return cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
+                return cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            return "haarcascade_frontalface_default.xml"
     return ruta_xml
 
 def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
@@ -58,26 +61,45 @@ def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fi
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
-        
-    cascade_humano = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    cascade_anime = cv2.CascadeClassifier(asegurar_cascade_anime("storage"))
-        
-    ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    
+    ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
     fotogramas_totales = int((t_fin - t_inicio) * fps)
     registro_rostros = []
-        
+    
+    # Solución al error: Validamos de forma estricta si CascadeClassifier está disponible
+    detector_disponible = hasattr(cv2, 'CascadeClassifier')
+    
+    cascade_humano = None
+    cascade_anime = None
+    
+    if detector_disponible:
+        try:
+            if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
+                cascade_humano = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            else:
+                cascade_humano = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+            cascade_anime = cv2.CascadeClassifier(asegurar_cascade_anime("storage"))
+        except:
+            detector_disponible = False
+
     for f_idx in range(fotogramas_totales):
         ret, frame = cap.read()
         if not ret: 
             break
+            
         if f_idx % 8 == 0:
-            gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (0, 0), fx=0.25, fy=0.25)
-            faces = cascade_humano.detectMultiScale(gray, 1.3, 3)
+            coordenadas_x = []
+            if detector_disponible and cascade_humano is not None:
+                try:
+                    gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (0, 0), fx=0.25, fy=0.25)
+                    faces = cascade_humano.detectMultiScale(gray, 1.3, 3)
+                                
+                    if len(faces) == 0 and cascade_anime is not None:
+                        faces = cascade_anime.detectMultiScale(gray, 1.1, 3)
                         
-            if len(faces) == 0:
-                faces = cascade_anime.detectMultiScale(gray, 1.1, 3)
-                
-            coordenadas_x = sorted([int((x + w // 2) * 4) for (x, _, w, _) in faces])
+                    coordenadas_x = sorted([int((x + w // 2) * 4) for (x, _, w, _) in faces])
+                except:
+                    pass
             registro_rostros.append(coordenadas_x)
             
     cap.release()
@@ -217,9 +239,8 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
         return {"status": "error", "mensaje": str(err)}
 
 # =========================================================================
-# 🗄️ PASARELA STRIPE E INTEGRACIÓN CON SUPABASE
+# 🗄️ PASARELA INTEGRADA CON SUPABASE
 # =========================================================================
-STRIPE_PUBLISHABLE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
@@ -279,7 +300,6 @@ cookie_controller.set("zexos_user_email", email_usuario)
 user_role = "normal"
 payment_status = "Pendiente / Gratuito"
 
-# REGLA MAESTRA: Si el correo es tu dirección principal
 if email_usuario.lower() == "andres3320490@gmail.com":
     user_role = "admin"
     payment_status = "Cuenta Propietaria Maestra"
@@ -288,18 +308,32 @@ else:
         try:
             res = supabase.table("usuarios_vip").select("*").eq("email", email_usuario).execute()
             if res.data and len(res.data) > 0:
-                user_role = "vip"
-                payment_status = "Verificado en Base de Datos (usuarios_vip)"
+                datos_vip = res.data[0]
+                fecha_expira = datos_vip.get("expira_el")
+                
+                if fecha_expira:
+                    expira_dt = datetime.datetime.fromisoformat(fecha_expira.replace("Z", "+00:00"))
+                    ahora_dt = datetime.datetime.now(datetime.timezone.utc)
+                    
+                    if ahora_dt > expira_dt:
+                        supabase.table("usuarios_vip").delete().eq("email", email_usuario).execute()
+                        user_role = "normal"
+                        payment_status = "Suscripción VIP Expirada (1 mes cumplido)"
+                    else:
+                        user_role = "vip"
+                        payment_status = f"VIP Activo hasta: {expira_dt.strftime('%d/%m/%Y')}"
+                else:
+                    user_role = "vip"
+                    payment_status = "Verificado en Base de Datos (usuarios_vip)"
         except Exception:
             pass
 
-# Fallback por dominios corporativos adicionales
 if email_usuario.endswith("@zexos.ai") or email_usuario in ["admin@zexos.com"]:
     user_role = "admin"
     payment_status = "Cuenta Corporativa Interna Activa"
 
 # =========================================================================
-# 🔐 CONSOLA DE ADMINISTRACIÓN (LLAVE: ZexOSAdmin)
+# 🔒 CONSOLA DE ADMINISTRACIÓN (LLAVE: ZexOSAdmin)
 # =========================================================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔒 Consola de Control")
@@ -307,9 +341,9 @@ clave_admin = st.sidebar.text_input("Clave de Acceso Root:", type="password")
 
 if clave_admin == "ZexOSAdmin":
     st.sidebar.success("🔑 Acceso Concedido")
-    user_role = "admin"  # Eleva temporalmente los privilegios del panel actual
+    user_role = "admin"
     
-    st.sidebar.markdown("### 👥 Gestionar Roles VIP")
+    st.sidebar.markdown("### 👥 Gestionar Roles VIP (1 Mes)")
     target_mail = st.sidebar.text_input("Correo del Usuario:", placeholder="usuario@gmail.com").strip()
     
     col_add, col_del = st.sidebar.columns(2)
@@ -318,13 +352,14 @@ if clave_admin == "ZexOSAdmin":
         with col_add:
             if st.button("➕ Dar VIP"):
                 try:
-                    # Verifica si ya existe para no duplicar
+                    fecha_expiracion = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=30)).isoformat()
                     check = supabase.table("usuarios_vip").select("*").eq("email", target_mail).execute()
                     if not check.data:
-                        supabase.table("usuarios_vip").insert({"email": target_mail}).execute()
-                        st.sidebar.success(f"¡{target_mail} ahora es VIP!")
+                        supabase.table("usuarios_vip").insert({"email": target_mail, "expira_el": fecha_expiracion}).execute()
+                        st.sidebar.success(f"¡{target_mail} ahora es VIP por 1 mes!")
                     else:
-                        st.sidebar.warning("Ya tiene VIP activo.")
+                        supabase.table("usuarios_vip").update({"expira_el": fecha_expiracion}).eq("email", target_mail).execute()
+                        st.sidebar.success(f"Renovado 1 mes VIP para {target_mail}")
                 except Exception as e:
                     st.sidebar.error(f"Error: {e}")
                     
@@ -336,26 +371,31 @@ if clave_admin == "ZexOSAdmin":
                 except Exception as e:
                     st.sidebar.error(f"Error: {e}")
 
-# Render de UI final según nivel de acceso determinado
+# =========================================================================
+# ⏱️ ASIGNACIÓN DE TIEMPOS
+# =========================================================================
 if user_role == "admin":
     st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
     st.caption(f"💳 Estado Financiero: {payment_status}")
-    limite_tiempo_max = 60.0
+    limite_tiempo_max = float('inf')
+    texto_limite = "Infinito"
 elif user_role == "vip":
     st.markdown("Tu nivel de acceso actual es: <span class='badge-vip'>USER VIP PREMIUM</span>", unsafe_allow_html=True)
     st.caption(f"💳 Estado Financiero: {payment_status}")
-    limite_tiempo_max = 30.0
+    limite_tiempo_max = 1800.0
+    texto_limite = "30 minutos"
 else:
     st.markdown("Tu nivel de acceso actual es: <span class='badge-normal'>USUARIO ESTÁNDAR</span>", unsafe_allow_html=True)
     st.caption(f"⚠️ Estado Financiero: {payment_status}")
-    limite_tiempo_max = 12.0
+    limite_tiempo_max = 7200.0
+    texto_limite = "120 minutos"
     
     st.sidebar.markdown("---")
-    st.sidebar.info("⭐ ¿Quieres procesar más tiempo?")
+    st.sidebar.info("⭐ ¿Quieres acceso Premium?")
     PAYPAL_ME_URL = "https://www.paypal.com/paypalme/andres3320490" 
     st.sidebar.markdown(f'<a href="{PAYPAL_ME_URL}" target="_blank" class="paypal-btn">💳 Obtener VIP con PayPal</a>', unsafe_allow_html=True)
 
-st.sidebar.markdown(f"**Límite del Plan:** {int(limite_tiempo_max)} segundos por Clip.")
+st.sidebar.markdown(f"**Límite del Plan:** {texto_limite} por Clip.")
 
 formato_seleccionado = st.sidebar.selectbox("Relación de Aspecto Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Subtítulos Dinámicos Inteligentes", value=True)
@@ -412,9 +452,9 @@ with col_der:
         
         st.success("¡Tus clips ya están listos!")
         total_clips = res.get("total_clips", 1)
-        opciones_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
-        clip_elegido = st.selectbox("Selecciona fragmento:", options=opciones_clips)
-        indice_clip = opciones_clips.index(clip_elegido) + 1
+        options_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
+        clip_elegido = st.selectbox("Selecciona fragmento:", options=options_clips)
+        indice_clip = options_clips.index(clip_elegido) + 1
         
         dir_tarea = os.path.join("storage", tid)
         if os.path.exists(dir_tarea):
