@@ -12,12 +12,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- NOTA TÉCNICA: Recuerda que para admitir archivos de hasta 4GB en un servidor
-# propio o VPS, se debe definir en el archivo `.streamlit/config.toml`:
-# [server]
-# maxUploadSize = 4096
-# ---------------------------------------------------------------------------
-
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -57,7 +51,7 @@ if not email_usuario:
     st.info("💡 Introduce tu correo electrónico arriba para desbloquear el panel de control.")
     st.stop()
 
-# --- VERIFICACIÓN DE RANGO / ADMIN ---
+# --- VERIFICACIÓN DE RANGO / ADMIN (SOLUCIÓN DEFINITIVA VIP) ---
 es_premium_o_vip = False
 es_admin = False
 rango_usuario = "Gratuito"
@@ -72,13 +66,16 @@ else:
     email_usuario = email_usuario.lower()
 
 try:
+    # Solución definitiva: Descargamos los datos y buscamos el correo barriendo los valores de la fila
+    # Esto ignora si la columna se llama "email", "correo electrónico" o "correo"
     respuesta = supabase.table("usuarios_vip").select("*").execute()
     if respuesta.data:
         lista_usuarios_cruda = respuesta.data
         if not es_admin:
             for fila in respuesta.data:
-                valores = [str(val).strip().lower() for val in fila.values()]
-                if email_usuario in valores:
+                # Convertimos todos los valores de las columnas a texto limpio en minúsculas
+                valores_fila = [str(val).strip().lower() for val in fila.values()]
+                if email_usuario in valores_fila:
                     es_premium_o_vip = True
                     rango_usuario = "VIP / Premium Ilimitado 💎"
                     break
@@ -90,7 +87,7 @@ st.sidebar.markdown(f"**Usuario:** `{email_usuario}`")
 st.sidebar.markdown(f"**Rango:** `{rango_usuario}`")
 st.sidebar.markdown("---")
 
-# --- PANEL EXCLUSIVO DE ADMINISTRADOR (3 PUNTOS DE CONTROL) ---
+# --- PANEL EXCLUSIVO DE ADMINISTRADOR ---
 if es_admin:
     st.sidebar.markdown("""
     <div class="admin-box">
@@ -149,10 +146,22 @@ if not es_premium_o_vip:
     st.sidebar.info("⏳ **Activación del servicio:** Tras completar tu pago en PayPal, el estado Pro se validará y activará en tu cuenta en un lapso máximo de **24 horas**.")
     st.sidebar.markdown("---")
 
-# --- PROCESAMIENTO MULTIMEDIA ---
+# --- PROCESAMIENTO MULTIMEDIA & PERSONALIZACIÓN ESTÉTICA ---
 st.sidebar.subheader("Engine Render Specs")
 formato_seleccionado = st.sidebar.selectbox("Aspect Ratio Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Inyectar Subtítulos Dinámicos", value=True)
+
+# Nuevas funciones de personalización manual solicitadas
+fuente_seleccionada = "Impact"
+color_seleccionado = "#FFFFFF"
+
+if con_subtitulos:
+    st.sidebar.markdown("**🎨 Estilo de Subtítulos**")
+    fuente_seleccionada = st.sidebar.selectbox(
+        "Tipografía", 
+        options=["Impact", "Arial Black", "Montserrat-Bold", "Bangers", "TheBoldFont"]
+    )
+    color_seleccionado = st.sidebar.color_picker("Color del Texto Principal", "#deff9a")
 
 if not es_premium_o_vip:
     st.warning("⚠️ **Capa Free Activa:** Límite de **120 minutos** por video. Peso máx: **2 GB**.")
@@ -165,17 +174,15 @@ else:
 video_subido = st.file_uploader("Cargar Máster Audiovisual", type=["mp4", "mkv", "mov"])
 
 if video_subido:
-    # --- ASIGNACIÓN DE LÍMITES DE PESO ---
     peso_archivo_bytes = video_subido.size
-    peso_max_free = 2048 * 1024 * 1024     # 2 GB para usuarios gratuitos en bytes
-    peso_max_premium = 4096 * 1024 * 1024  # 4 GB para VIP/Admin en bytes
+    peso_max_free = 2048 * 1024 * 1024     
+    peso_max_premium = 4096 * 1024 * 1024  
     
     if not es_premium_o_vip and peso_archivo_bytes > peso_max_free:
         st.error(f"❌ El archivo pesa {(peso_archivo_bytes / (1024*1024)):.1f} MB. Has superado el límite de 2 GB de la cuenta gratuita.")
-        st.info("💡 **SaaS Lock:** Adquiere el Plan Pro en la barra lateral para expandir tu límite hasta los **4 GB**.")
         st.stop()
     elif es_premium_o_vip and peso_archivo_bytes > peso_max_premium:
-        st.error(f"❌ El archivo supera los 4 GB permitidos para cuentas VIP ({ (peso_archivo_bytes / (1024*1024*1024)):.2f} GB detectados).")
+        st.error(f"❌ El archivo supera los 4 GB permitidos ({ (peso_archivo_bytes / (1024*1024*1024)):.2f} GB detectados).")
         st.stop()
         
     path_temporal = "validando_duracion.mp4"
@@ -190,7 +197,6 @@ if video_subido:
             
         st.write(f"⏱️ Duración detectada: `{duracion_real:.2f} segundos` | Peso: `{ (peso_archivo_bytes / (1024*1024)):.1f} MB`")
         
-        # 7200.0 segundos equivalen exactamente a 120 minutos
         if duracion_real > 7200.0 and not es_premium_o_vip:
             st.error(f"❌ Tu video dura {duracion_real:.1f}s. Has superado el límite de 120 minutos de la cuenta gratuita.")
         else:
@@ -205,8 +211,16 @@ if video_subido:
                     with st.spinner("Procesando en la nube con IA... (Archivos grandes pueden demorar varios minutos)"):
                         try:
                             archivos_envio = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
-                            datos_formulario = {"formato": formato_seleccionado, "con_subtitulos": str(con_subtitulos).lower()}
-                            respuesta = requests.post(BACKEND_API_URL, files=archivos_envio, data=datos_formulario, timeout=1200) # Timeout de 20 minutos
+                            
+                            # Enviamos también las fuentes y colores seleccionados al backend de Hugging Face
+                            datos_formulario = {
+                                "formato": formato_seleccionado, 
+                                "con_subtitulos": str(con_subtitulos).lower(),
+                                "fuente": fuente_seleccionada,
+                                "color": color_seleccionado
+                            }
+                            
+                            respuesta = requests.post(BACKEND_API_URL, files=archivos_envio, data=datos_formulario, timeout=1200) 
                             if respuesta.status_code == 200:
                                 st.balloons()
                                 st.subheader("Resultado Final")
