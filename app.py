@@ -12,13 +12,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Inicializar el controlador de cookies premium
 controller = CookieController()
 
-# Conexión a Base de Datos Supabase
+# Conexión Segura al clúster de Base de Datos
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# --- INYECCIÓN DE INTERFAZ HORIZONTAL PREMIUM ---
 st.markdown("""
     <style>
     .stApp { background-color: #07090e; color: #E2E8F0; }
@@ -50,18 +52,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =========================================================================
-# 🌐 DETECCIÓN Y ESTRUCTURACIÓN DINÁMICA DE LA URL DE HUGGING FACE (100% FUNCIONAL)
+# 🌐 URL CORRECTA Y DINÁMICA DEL BACKEND (SIN CORRECCIÓN .STATIC)
 # =========================================================================
-# CONFIGURACIÓN: Cambia esto por el nombre exacto de tu Space del backend si es diferente
-BACKEND_SPACE_NAME = "vzex-zexiastudio" 
-
-# El script autodetecta si está en local o en producción en la nube de HF
-if "SPACE_ID" in os.environ:
-    # Si está en producción, genera la URL directa y dinámica usando el protocolo seguro
-    BACKEND_BASE_URL = f"https://{BACKEND_SPACE_NAME}.hf.space"
-else:
-    # Si estás probando localmente
-    BACKEND_BASE_URL = "http://localhost:7860"
+# Se elimina '.static' para que Hugging Face permita el flujo dinámico de peticiones
+BACKEND_BASE_URL = "https://vzex-zexiastudio.hf.space"
 
 st.title("⚡ ZexOS AI Studio Enterprise")
 
@@ -190,7 +184,7 @@ with col_derecha:
                     "diccionario_manual": diccionario_manual
                 }
                 
-                # Petición estructurada con URL absoluta segura e inyección de barra final
+                # Envío de peticiones HTTP POST con barra al final para FastAPI
                 if video_subido:
                     archivos = {"file": (video_subido.name, video_subido.getvalue(), video_subido.type)}
                     r = requests.post(f"{BACKEND_BASE_URL}/procesar/", files=archivos, data=datos_formulario, timeout=(10, 600))
@@ -235,7 +229,7 @@ with col_derecha:
                     elif estado == "completed":
                         placeholder_monitor.empty()
                         st.balloons()
-                        st.markdown('<div class="clip-card unlocked"><span>✅ <b>¡Clips ready en el nodo!</b></span></div>', unsafe_allow_html=True)
+                        st.markdown('<div class="clip-card unlocked"><span>✅ <b>¡Clips listos en la nube!</b></span></div>', unsafe_allow_html=True)
                         
                         total_clips = info_tarea.get("total_clips", 1)
                         opciones_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
