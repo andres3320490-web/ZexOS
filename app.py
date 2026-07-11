@@ -9,20 +9,19 @@ import cv2
 import torch
 import yt_dlp
 import urllib.request
-import whisper  # Usamos whisper estándar de openai para evitar fallos de compilación
 import streamlit as st
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+# Sintaxis de MoviePy v2 corregida
+from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
 
-# Intentar importar el worker desde tasks.py externo si existe, si no, se define la estructura base
+# Intentar importar el worker desde tasks.py externo si existe
 try:
     from tasks import async_render_worker
 except ImportError:
-    # Definición de respaldo por si no encuentra el archivo externo durante el despliegue
     def async_render_worker(*args, **kwargs):
         return {"status": "success", "total_clips": 1}
 
