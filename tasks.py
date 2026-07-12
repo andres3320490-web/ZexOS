@@ -31,7 +31,7 @@ try:
 except Exception as e:
     print(f"Advertencia al configurar MoviePy de forma interna: {e}")
 
-# Ahora se importan las librerías de forma segura
+# Ahora se importan las librerías de forma segura de acuerdo a la API v2.0
 import cv2
 import torch
 import yt_dlp
@@ -289,7 +289,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = float(plan["start"]), float(plan["end"])
             
-            # --- 🛠️ CORRECCIÓN 1: .subclip/slice REMPLAZADOS POR .subclipped() (Estándar v2.0) ---
+            # --- ✅ CORRECCIÓN 1: Método oficial v2.0 para recortar ---
             chunk = clip_completo.subclipped(t_ini, t_fin)
             duracion_chunk = float(chunk.duration)
             
@@ -298,8 +298,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                 w_orig, h_orig = chunk.size
                 target_w = int(h_orig * (9 / 16))
                 
-                def transformar_cuadros_tracking(get_frame, t):
-                    frame = get_frame(t)
+                # Modificado para trabajar con funciones limpias de fotogramas admitidas por map_frames
+                def transformar_cuadros_tracking(frame, t):
                     indice_f = min(int(t * tracking["fps"]), len(tracking["coordenadas"]) - 1)
                     centro_x = tracking["coordenadas"][indice_f]
                     
@@ -307,8 +307,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                     x1 = max(0, min(w_orig - target_w, x1))
                     return frame[:, x1:x1 + target_w]
                 
-                # --- 🛠️ CORRECCIÓN 2: .transform ELIMINADO. Reemplazado por .transforming.via_frame() ---
-                chunk = chunk.transforming.via_frame(transformar_cuadros_tracking)
+                # --- ✅ CORRECCIÓN 2: Uso correcto de map_frames en MoviePy v2.x ---
+                chunk = chunk.map_frames(lambda gf, t: transformar_cuadros_tracking(gf(t), t))
             
             componentes_chunk = [chunk]
             
@@ -338,7 +338,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                     contiene_gancho = any(str(w["text"]).lower().strip(".,¡!¿?") in PALABRAS_RETENCION for w in bloque["palabras"])
                     color_bloque = color_sub_hex if contiene_gancho else "#FFFFFF"
                     
-                    # --- 🛠️ CORRECCIÓN 3: Reestructuración de TextClip sin métodos obsoletos de encadenamiento ---
+                    # --- ✅ CORRECCIÓN 3: TextClip e interfaz con_position limpia ---
                     txt_clip = TextClip(
                         text=texto_completo_bloque,
                         font_size=44 if estilo_subtitulos == "hormozi" else 34,
@@ -347,15 +347,14 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         size=(chunk.size[0] - 60, None)
                     )
                     
-                    # --- 🛠️ CORRECCIÓN 4: Métodos .with_duration y .with_start actualizados al estándar seguro v2.0 ---
-                    txt_clip = txt_clip.with_duration(duracion_bloque).with_start(b_start)
-                    
-                    # Asignación de posición mediante la propiedad interna de transformación v2.x
-                    txt_clip.position = ('center', int(chunk.size[1] * 0.70))
+                    # --- ✅ CORRECCIÓN 4: Encadenamiento nativo oficial v2.0 ---
+                    txt_clip = (txt_clip
+                                .with_duration(duracion_bloque)
+                                .with_start(b_start)
+                                .with_position(('center', int(chunk.size[1] * 0.70))))
                     
                     componentes_chunk.append(txt_clip)
             
-            # --- 🛠️ CORRECCIÓN 5: Duración de CompositeVideoClip simplificada ---
             video_final = CompositeVideoClip(componentes_chunk).with_duration(duracion_chunk)
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
