@@ -30,9 +30,9 @@ try:
     from moviepy.config import change_settings
     change_settings({"FFMPEG_BINARY": ruta_ffmpeg_activa})
 except Exception as e:
-    print(f"Advertencia al mapear configuración interna de MoviePy: {e}")
+    print(f"Advertencia al configurar MoviePy de forma interna: {e}")
 
-# Ahora sí, importaciones seguras de dependencias masivas
+# Importaciones seguras de dependencias masivas
 import cv2
 import torch
 import yt_dlp
@@ -40,6 +40,11 @@ import requests
 import numpy as np
 import whisper
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
+
+# ==============================================================================
+# ⚙️ CONFIGURACIÓN DE DISPOSITIVO Y VARIABLES GLOBALES
+# ==============================================================================
+DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Diccionario inteligente para la inyección automática de Emojis de Retención
 EMOJI_DICTIONARY = {
@@ -114,7 +119,7 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
 def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
     """
     Rastrea el centro de atención analizando mapas de calor de bordes y densidad
-    de color. Funciona perfectamente con Humanos, VTubers y gameplays sin configuraciones extras.
+    de color. Funciona perfectamente con Humanos, VTubers y gameplays con suavizado cinemático.
     """
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -157,7 +162,7 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
     
     if not centros_fotogramas: centros_fotogramas = [ancho_orig // 2]
     
-    # Suavizado cinemático por inercia
+    # Suavizado cinemático por inercia (Paneo manual simulado)
     suavizados = []
     pos_actual = centros_fotogramas[0]
     for pos_detectada in centros_fotogramas:
@@ -236,7 +241,7 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
     
     for i in range(0, len(palabras_filtradas), max_palabras):
         grupo = palabras_filtradas[i:i + max_palabras]
-        if not grupo: continue
+        if not group: continue
         bloques.append({
             "start": grupo[0]["start"],
             "end": grupo[-1]["end"],
@@ -275,7 +280,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             chunk = clip_completo[t_ini:t_fin]
             duracion_chunk = chunk.duration
             
-            # Reencuadre dinámico automático 9:16 para Shorts (Universal)
+            # Reencuadre dinámico automático para Shorts
             if "9:16" in formato or "Short" in formato:
                 tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
                 w_orig, h_orig = chunk.size
@@ -335,7 +340,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                     
                     componentes_chunk.append(txt_clip)
             
-            # Compilación final y codificación de alto rendimiento local
+            # Compilación final y codificación estable bajo MoviePy 2.0.0
             video_final = CompositeVideoClip(componentes_chunk).with_duration(duracion_chunk)
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
