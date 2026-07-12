@@ -2,27 +2,31 @@ import os
 import sys
 import subprocess
 import requests
+import shutil
 
 # ==============================================================================
-# 🚀 PARCHE DE ENTORNO REFORZADO: Vinculación para MoviePy y Whisper
+# 🚀 PARCHE DE ENTORNO REFORZADO: Vinculación Nativa para Docker en Hugging Face
 # ==============================================================================
-def forzar_instalacion_ffmpeg():
-    """Descarga e inyecta un binario estático para que tanto MoviePy como Whisper lo encuentren."""
-    try:
-        import imageio_ffmpeg
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "imageio-ffmpeg"])
-        import imageio_ffmpeg
-    ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
+def configurar_ffmpeg_nativo():
+    """Configura las variables de entorno usando el FFmpeg instalado en el sistema Docker."""
+    # Ruta estándar del binario instalado por apt-get en entornos linux-slim
+    ruta_binario = "/usr/bin/ffmpeg"
+    
+    # Si por alguna razón no estuviera ahí, buscamos en el PATH del sistema
+    if not os.path.exists(ruta_binario):
+        ruta_buscada = shutil.which("ffmpeg")
+        if ruta_buscada:
+            ruta_binario = ruta_buscada
+
     os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
-        
+    
     dir_binario = os.path.dirname(ruta_binario)
     if dir_binario not in os.environ["PATH"]:
         os.environ["PATH"] = dir_binario + os.pathsep + os.environ["PATH"]
             
     return ruta_binario
 
-ruta_ffmpeg_activa = forzar_instalacion_ffmpeg()
+ruta_ffmpeg_activa = configurar_ffmpeg_nativo()
 
 try:
     from moviepy.config import change_settings
@@ -237,7 +241,7 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
         
     for i in range(0, len(palabras_filtradas), max_palabras):
         grupo = palabras_filtradas[i:i + max_palabras]
-        if not grupo: continue # <-- ¡CORREGIDO AQUÍ! (Cambiado de group a grupo)
+        if not grupo: continue 
         bloques.append({
             "start": grupo[0]["start"],
             "end": grupo[-1]["end"],
@@ -282,7 +286,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             bloques_texto = construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin) if (con_subtitulos and segmentos_palabras) else []
 
             def transformar_y_subtitular_cuadros(get_frame, t):
-                # .copy() soluciona de raíz el bloqueo de memoria de tipo Read-Only
+                # .copy() soluciona el bloqueo de memoria de tipo Read-Only
                 frame = get_frame(t).copy()
                 t_global = t_ini + t
                 
