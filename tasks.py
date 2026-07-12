@@ -74,7 +74,7 @@ def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
         return ydl.prepare_filename(info)
 
 # ==============================================================================
-# 🔥 MEJORA IA 1: Transcripción de Audio Real (Estilo Opus Clip / Wisecut)
+# 🔥 TECNOLOGÍA LOCAL 1: OpenAI Whisper (100% Gratis, Local y sin API Keys)
 # ==============================================================================
 def transcribir_video_por_palabras(ruta_video: str) -> list:
     """Utiliza OpenAI Whisper para mapear palabras con timestamps de forma milimétrica."""
@@ -94,12 +94,12 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
     return segmentos_palabras
 
 # ==============================================================================
-# 🔥 MEJORA IA 2: Visión Artificial y Multi-Tracking Cinemático de Rostros
+# 🔥 TECNOLOGÍA LOCAL 2: Visión por Computador Universal (Bordes Sobel + Contraste)
 # ==============================================================================
 def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
     """
-    Rastrea múltiples rostros simultáneamente, calcula el centro promedio 
-    de masa de la escena y suaviza el movimiento por inercia física (paneo fluido).
+    Rastrea el centro de atención analizando mapas de calor de bordes y densidad
+    de color. Funciona perfectamente con Humanos, VTubers y gameplays sin configuraciones extras.
     """
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -108,23 +108,26 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
     ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
     fotogramas_totales = int((t_fin - t_inicio) * fps)
     centros_fotogramas = []
-    
-    cascade_humano = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
     for f_idx in range(fotogramas_totales):
         ret, frame = cap.read()
         if not ret: break
             
-        if f_idx % 4 == 0:  # Muestreo acelerado
+        if f_idx % 4 == 0:  
             try:
-                gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (0, 0), fx=0.25, fy=0.25)
-                faces = cascade_humano.detectMultiScale(gray, 1.2, 5)
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                reducido = cv2.resize(gray, (0, 0), fx=0.25, fy=0.25)
                 
-                if len(faces) > 0:
-                    # Multi-tracking: baricentro exacto de todos los rostros detectados
-                    centros_x = [int((x + w // 2) * 4) for (x, _, w, _) in faces]
-                    centro_escena = int(np.mean(centros_x))
-                    centros_fotogramas.append(centro_escena)
+                # Gradiente de Sobel para capturar la estructura del personaje/avatar
+                sobely = cv2.Sobel(reducido, cv2.CV_64F, 0, 1, ksize=5)
+                abs_sobely = np.absolute(sobely)
+                scaled_sobel = np.uint8(255 * (abs_sobely / np.max(abs_sobely))) if np.max(abs_sobely) > 0 else reducido
+                
+                column_sums = np.sum(scaled_sobel, axis=0)
+                centro_estimado = int(np.argmax(column_sums) * 4)
+                
+                if 0 < centro_estimado < ancho_orig:
+                    centros_fotogramas.append(centro_estimado)
                 else:
                     centros_fotogramas.append(ancho_orig // 2)
             except:
@@ -139,24 +142,24 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
     
     if not centros_fotogramas: centros_fotogramas = [ancho_orig // 2]
     
-    # Algoritmo de suavizado cinemático
+    # Suavizado cinemático por inercia
     suavizados = []
     pos_actual = centros_fotogramas[0]
     for pos_detectada in centros_fotogramas:
         distancia = pos_detectada - pos_actual
-        factor_inercia = 0.60 if abs(distancia) > (ancho_orig // 4) else 0.15
+        factor_inercia = 0.50 if abs(distancia) > (ancho_orig // 4) else 0.12
         pos_actual += int(distancia * factor_inercia)
         suavizados.append(pos_actual)
             
     return {"coordenadas": suavizados, "fps": fps}
 
 # ==============================================================================
-# 🔥 MEJORA IA 3: Curación de Clips Cortos Adaptativa y Puntuación Viral
+# 🔥 TECNOLOGÍA LOCAL 3: Curation Engine de Retención por NLP Básico
 # ==============================================================================
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
     """
-    Si el video es corto, no lo rompe y procesa el 100%. Si es largo, analiza 
-    las métricas de velocidad verbal (WPM) y palabras clave para aislar los mejores ganchos.
+    Evalúa matemáticamente las secciones más interesantes analizando picos de WPM 
+    y densidad de palabras clave del diccionario de retención.
     """
     if duracion_total < 25.0 or not segmentos_palabras:
         return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración del video."]}]
@@ -209,7 +212,25 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
     return clips_filtrados if clips_filtrados else [{"start": 0.0, "end": duracion_total, "score": 85, "reasons": ["Segmento óptimo adaptado."]}]
 
 # ==============================================================================
-# 🚀 PIPELINE DE PROCESAMIENTO MULTI-CAPA DEFINITIVO
+# 🔥 TECNOLOGÍA LOCAL 4: Algoritmo de Bloques Dinámicos (Estilo CapCut / Shorts)
+# ==============================================================================
+def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_palabras=3):
+    """Agrupa los subtítulos en ráfagas cortas de lectura cómoda para retener atención."""
+    palabras_filtradas = [w for w in segmentos_palabras if t_ini <= w["start"] < t_fin]
+    bloques = []
+    
+    for i in range(0, len(palabras_filtradas), max_palabras):
+        grupo = palabras_filtradas[i:i + max_palabras]
+        if not grupo: continue
+        bloques.append({
+            "start": grupo[0]["start"],
+            "end": grupo[-1]["end"],
+            "palabras": grupo
+        })
+    return bloques
+
+# ==============================================================================
+# 🚀 PIPELINE DE PROCESAMIENTO MULTI-CAPA DEFINITIVO (100% COMPATIBLE)
 # ==============================================================================
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
@@ -239,7 +260,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             chunk = clip_completo[t_ini:t_fin]
             duracion_chunk = chunk.duration
             
-            # Reencuadre dinámico inteligente asistido por el Multi-Tracking de la cámara
+            # Reencuadre dinámico automático 9:16 para Shorts (Universal)
             if "9:16" in formato or "Short" in formato:
                 tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
                 w_orig, h_orig = chunk.size
@@ -258,46 +279,48 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             
             componentes_chunk = [chunk]
             
-            if con_subtitulos:
-                for w_info in segmentos_palabras:
-                    if t_ini <= w_info["start"] < t_fin:
-                        w_start = w_info["start"] - t_ini
-                        w_end = w_info["end"] - t_ini
-                        
-                        # Blindaje matemático anti-desbordamientos en videos cortos
-                        techo_maximo = duracion_chunk - 0.02
-                        if w_start >= techo_maximo: continue
-                            
-                        w_start = max(0.0, w_start)
-                        w_end = min(techo_maximo, w_end)
-                        duracion_sub = max(0.05, w_end - w_start)
-                        
-                        if (w_start + duracion_sub) > techo_maximo:
-                            w_start = max(0.0, techo_maximo - duracion_sub)
-                        
-                        word_raw = w_info["text"].strip()
+            if con_subtitulos and segmentos_palabras:
+                bloques_texto = construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin)
+                
+                for bloque in bloques_texto:
+                    b_start = bloque["start"] - t_ini
+                    b_end = bloque["end"] - t_ini
+                    
+                    techo_maximo = duracion_chunk - 0.02
+                    if b_start >= techo_maximo: continue
+                    
+                    b_start = max(0.0, b_start)
+                    b_end = min(techo_maximo, b_end)
+                    duracion_bloque = max(0.08, b_end - b_start)
+                    
+                    palabras_texto = []
+                    for w in bloque["palabras"]:
+                        word_raw = w["text"].strip()
                         palabra_limpia = word_raw.lower().strip(".,¡!¿?")
-                        
                         emoji = EMOJI_DICTIONARY.get(palabra_limpia, "")
-                        texto_final = f"{emoji} {word_raw}" if emoji else word_raw
-                        color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
+                        palabras_texto.append(f"{emoji} {word_raw}" if emoji else word_raw)
                         
-                        txt_clip = TextClip(
-                            text=texto_final.upper(),
-                            font_size=46 if estilo_subtitulos == "hormozi" else 36,
-                            color=color_actual,
-                            font=ruta_fuente_absoluta,
-                            size=(chunk.size[0] - 50, None)
-                        )
-                        
-                        txt_clip = (txt_clip
-                                    .with_duration(duracion_sub)
-                                    .with_start(w_start)
-                                    .with_position(('center', int(chunk.size[1] * 0.70))))
-                        
-                        componentes_chunk.append(txt_clip)
+                    texto_completo_bloque = " ".join(palabras_texto).upper()
+                    
+                    contiene_gancho = any(w["text"].lower().strip(".,¡!¿?") in PALABRAS_RETENCION for w in bloque["palabras"])
+                    color_bloque = color_sub_hex if contiene_gancho else "#FFFFFF"
+                    
+                    txt_clip = TextClip(
+                        text=texto_completo_bloque,
+                        font_size=44 if estilo_subtitulos == "hormozi" else 34,
+                        color=color_bloque,
+                        font=ruta_fuente_absoluta,
+                        size=(chunk.size[0] - 60, None)
+                    )
+                    
+                    txt_clip = (txt_clip
+                                .with_duration(duracion_bloque)
+                                .with_start(b_start)
+                                .with_position(('center', int(chunk.size[1] * 0.70))))
+                    
+                    componentes_chunk.append(txt_clip)
             
-            # SOLUCIÓN CRÍTICA PARA MOVIEPY 2.0.0: Renderizar con duración forzada restrictiva (.with_duration)
+            # Compilación final y codificación de alto rendimiento local
             video_final = CompositeVideoClip(componentes_chunk).with_duration(duracion_chunk)
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
