@@ -4,7 +4,7 @@ import torch
 import yt_dlp
 import numpy as np
 
-# Importación directa limpia para MoviePy
+# Importación directa para MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
@@ -171,17 +171,14 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             if "9:16" in formato or "Short" in formato:
                 w_orig, h_orig = chunk.size
                 target_w = int(h_orig * (9 / 16))
-                meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
-                fn_centro = meta_rostros["data"]
-                                
-                # Ajustamos la función para trabajar con fl_image (pasa la imagen del frame directamente)
+                
+                # Ajustamos la función para la API moderna de MoviePy 2.0.0
                 def transformar_cuadros(frame):
-                    # Como fl_image no pasa t directamente, tomamos el centro estático calculado
-                    x1 = max(0, min(w_orig - target_w, (ancho_orig // 2) - (target_w // 2)))
+                    x1 = max(0, min(w_orig - target_w, (w_orig // 2) - (target_w // 2)))
                     return frame[:, x1:x1 + target_w]
                 
-                # CORREGIDO PARA MOVIEPY 2.0.0 (Uso de fl_image compatible)
-                chunk = chunk.fl_image(transformar_cuadros)
+                # CORREGIDO PARA MOVIEPY 2.0.0: image_transform reemplaza a fl_image
+                chunk = chunk.image_transform(transformar_cuadros)
             
             componentes_chunk = [chunk]
             
@@ -212,11 +209,10 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                                     .set_position(('center', int(chunk.size[1] * 0.72))))
                         
                         def animar_subtitulo(image):
-                            # Retorna el frame de la imagen estática del texto sin deformación temporal
                             return image
                             
-                        # CORREGIDO PARA MOVIEPY 2.0.0 (Uso de fl_image para el texto)
-                        txt_clip = txt_clip.fl_image(animar_subtitulo)
+                        # CORREGIDO PARA MOVIEPY 2.0.0: image_transform para el texto
+                        txt_clip = txt_clip.image_transform(animar_subtitulo)
                         componentes_chunk.append(txt_clip)
                         
             video_final = CompositeVideoClip(componentes_chunk)
