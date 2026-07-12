@@ -2,10 +2,11 @@ moviepy>=2.0.0
 imageio[ffmpeg]
 ffmpeg-python
 openai-whisper
-torch
-torchvision
-torchaudio
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.0+cpu
+torchvision==0.17.0+cpu
+torchaudio==2.2.0+cpu
 yt-dlp
 opencv-python-headless
 requests
-numpy
+numpy<2.0.0
