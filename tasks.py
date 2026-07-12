@@ -3,27 +3,30 @@ import sys
 import subprocess
 
 # ==============================================================================
-# 🚀 PARCHE ULTRA-COMPATIBLE: Auto-descarga de FFmpeg Estático Local
+# 🚀 PARCHE DE ENTORNO EN CLOUD: Vinculación Estricta de FFmpeg
 # ==============================================================================
-def garantizar_ffmpeg_estatico():
-    """Descarga y configura un binario estático de FFmpeg si el sistema no tiene uno."""
+def asegurar_ffmpeg_global():
+    # Intentar buscarlo primero en rutas estándar de Linux en Streamlit Cloud
+    rutas_comunes = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
+    for ruta in rutas_comunes:
+        if os.path.exists(ruta):
+            os.environ["IMAGEIO_FFMPEG_EXE"] = ruta
+            return ruta
+            
+    # Si no se encuentra en el sistema, descargar binario estático local de emergencia
     try:
         import imageio_ffmpeg
         ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
         os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
         return ruta_binario
     except ImportError:
-        print("Instalando imageio-ffmpeg dinámicamente...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "imageio-ffmpeg"])
         import imageio_ffmpeg
         ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
         os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
         return ruta_binario
 
-# Ejecutar el parche antes de cualquier importación de MoviePy
-ruta_ffmpeg_activa = garantizar_ffmpeg_estatico()
-
-# Forzar rutas en el sistema operativo para que OpenCV y Whisper también lo encuentren
+ruta_ffmpeg_activa = asegurar_ffmpeg_global()
 os.environ["PATH"] += os.pathsep + os.path.dirname(ruta_ffmpeg_activa)
 
 try:
@@ -46,7 +49,6 @@ from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 # ==============================================================================
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Diccionario inteligente para la inyección automática de Emojis de Retención
 EMOJI_DICTIONARY = {
     "dinero": "💰", "fuego": "🔥", "viral": "🔥", "ganar": "🏆",
     "secreto": "🤫", "atención": "🚨", "mira": "👀", "importante": "⚠️",
@@ -58,7 +60,6 @@ EMOJI_DICTIONARY = {
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "hoy", "increíble", "revelado", "atención", "importante"}
 
 def garantizar_fuente_fisica() -> str:
-    """Descarga una fuente TTF tipográfica real para evitar problemas con fuentes del sistema."""
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
     ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
@@ -93,11 +94,7 @@ def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
 
-# ==============================================================================
-# 🔥 TECNOLOGÍA LOCAL 1: OpenAI Whisper (100% Gratis, Local y sin API Keys)
-# ==============================================================================
 def transcribir_video_por_palabras(ruta_video: str) -> list:
-    """Utiliza OpenAI Whisper para mapear palabras con timestamps de forma milimétrica."""
     print(f"📦 Cargando modelo Whisper en {DISPOSITIVO}...")
     modelo = whisper.load_model("base", device=DISPOSITIVO)
     print("🎙️ Transcribiendo audio latente palabra por palabra...")
@@ -113,14 +110,7 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
             })
     return segmentos_palabras
 
-# ==============================================================================
-# 🔥 TECNOLOGÍA LOCAL 2: Visión por Computador Universal (Bordes Sobel + Contraste)
-# ==============================================================================
 def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
-    """
-    Rastrea el centro de atención analizando mapas de calor de bordes y densidad
-    de color. Funciona perfectamente con Humanos, VTubers y gameplays con suavizado cinemático.
-    """
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
@@ -138,7 +128,6 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 reducido = cv2.resize(gray, (0, 0), fx=0.25, fy=0.25)
                 
-                # Gradiente de Sobel para capturar la estructura del personaje/avatar
                 sobely = cv2.Sobel(reducido, cv2.CV_64F, 0, 1, ksize=5)
                 abs_sobely = np.absolute(sobely)
                 scaled_sobel = np.uint8(255 * (abs_sobely / np.max(abs_sobely))) if np.max(abs_sobely) > 0 else reducido
@@ -162,7 +151,6 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
     
     if not centros_fotogramas: centros_fotogramas = [ancho_orig // 2]
     
-    # Suavizado cinemático por inercia (Paneo manual simulado)
     suavizados = []
     pos_actual = centros_fotogramas[0]
     for pos_detectada in centros_fotogramas:
@@ -173,14 +161,7 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
             
     return {"coordenadas": suavizados, "fps": fps}
 
-# ==============================================================================
-# 🔥 TECNOLOGÍA LOCAL 3: Curation Engine de Retención por NLP Básico
-# ==============================================================================
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
-    """
-    Evalúa matemáticamente las secciones más interesantes analizando picos de WPM 
-    y densidad de palabras clave del diccionario de retención.
-    """
     if duracion_total < 25.0 or not segmentos_palabras:
         return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración del video."]}]
     
@@ -231,11 +212,7 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
             
     return clips_filtrados if clips_filtrados else [{"start": 0.0, "end": duracion_total, "score": 85, "reasons": ["Segmento óptimo adaptado."]}]
 
-# ==============================================================================
-# 🔥 TECNOLOGÍA LOCAL 4: Algoritmo de Bloques Dinámicos (Estilo CapCut / Shorts)
-# ==============================================================================
 def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_palabras=3):
-    """Agrupa los subtítulos en ráfagas cortas de lectura cómoda para retener atención."""
     palabras_filtradas = [w for w in segmentos_palabras if t_ini <= w["start"] < t_fin]
     bloques = []
     
@@ -249,9 +226,6 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
         })
     return bloques
 
-# ==============================================================================
-# 🚀 PIPELINE DE PROCESAMIENTO MULTI-CAPA DEFINITIVO (100% COMPATIBLE)
-# ==============================================================================
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_processed = []
@@ -280,7 +254,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             chunk = clip_completo[t_ini:t_fin]
             duracion_chunk = chunk.duration
             
-            # Reencuadre dinámico automático para Shorts
             if "9:16" in formato or "Short" in formato:
                 tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
                 w_orig, h_orig = chunk.size
@@ -340,7 +313,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                     
                     componentes_chunk.append(txt_clip)
             
-            # Compilación final y codificación estable bajo MoviePy 2.0.0
             video_final = CompositeVideoClip(componentes_chunk).with_duration(duracion_chunk)
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
