@@ -2,7 +2,6 @@ import subprocess
 import sys
 import os
 
-# --- PARCHE DE COMPILACIÓN INTERNO PARA PILLOW ---
 try:
     from PIL import Image
 except ImportError:
@@ -13,17 +12,15 @@ import streamlit as st
 from streamlit_cookies_controller import CookieController
 from supabase import create_client, Client
 
-# Asegurar importación limpia del módulo local tasks.py
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 try:
     from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
 except ImportError as e:
-    st.error(f"❌ Error al importar módulos en las tareas: {e}")
+    st.error(f"❌ Error crítico de importación en tasks.py: {e}")
     st.stop()
 
 cookie_controller = CookieController()
 
-# --- CONEXIÓN AUTOMÁTICA CON TU SUB-BASE (SUPABASE) ---
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
@@ -33,7 +30,6 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
-# --- TU DISEÑO Y ESTILO ORIGINAL ---
 st.markdown("""
     <style>
     .stApp { background-color: #05070a; color: #F1F5F9; }
@@ -57,19 +53,16 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-# --- VERIFICACIÓN DE ESTADO VIP DESDE SUPABASE ---
 try:
     respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
     es_vip = len(respuesta.data) > 0
 except Exception:
     es_vip = False
 
-# Control de consumo de minutos local para no-vip
 if "minutos_usados" not in st.session_state:
     st.session_state.minutos_usados = 0
 minutos_consumidos = st.session_state.minutos_usados
 
-# Parámetros del Sidebar
 st.sidebar.subheader("🛠️ Panel de Configuración Experta")
 
 if es_vip:
@@ -108,7 +101,6 @@ with col_der:
         if not url_remoto.strip() and not video_subido:
             st.error("❌ Por favor, proporciona una URL de video o arrastra un archivo local.")
         else:
-            # --- CONFIGURACIÓN DE LÍMITES DE SUBIDA SEGÚN RANGO ---
             ADMIN_EMAILS = ["andres3320490@gmail.com"]
             
             if email_usuario in ADMIN_EMAILS:
@@ -121,7 +113,7 @@ with col_der:
             limite_bytes = limite_gb * 1024 * 1024 * 1024
             
             if video_subido and video_subido.size > limite_bytes:
-                st.error(f"❌ El archivo excede el límite permitido para tu plan ({limite_gb} GB).")
+                st.error(f"❌ El archivo excede el límite permitido ({limite_gb} GB).")
                 st.stop()
                 
             if not es_vip and email_usuario not in ADMIN_EMAILS and minutos_consumidos >= 120:
@@ -130,7 +122,6 @@ with col_der:
 
             tarea_id = f"suite_{uuid.uuid4().hex[:12]}"
             st.session_state.tarea_id = tarea_id
-                        
             temp_dir = garantizar_entorno_tarea(tarea_id)
             ruta_input = ""
                         
@@ -142,17 +133,12 @@ with col_der:
             with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips...", expanded=True) as status:
                 try:
                     resultado = pipeline_procesamiento_masivo(
-                        tarea_id=tarea_id, 
-                        ruta_video_master=ruta_input, 
-                        formato=formato,
-                        con_subtitulos=con_sub, 
-                        color_sub_hex="#deff9a", 
-                        estilo_subtitulos=plantilla, 
-                        url_remoto=url_remoto,
-                        diccionario_manual=diccionario_manual
+                        tarea_id=tarea_id, ruta_video_master=ruta_input, formato=formato,
+                        con_subtitulos=con_sub, color_sub_hex="#deff9a", estilo_subtitulos=plantilla, 
+                        url_remoto=url_remoto, diccionario_manual=diccionario_manual
                     )
                 except Exception as ex:
-                    resultado = {"status": "error", "mensaje": f"Excepción interna detectada: {str(ex)}"}
+                    resultado = {"status": "error", "mensaje": f"Excepción crítica controlada: {str(ex)}"}
                                 
                 if resultado and resultado.get("status") == "success":
                     status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
@@ -161,7 +147,7 @@ with col_der:
                         st.session_state.minutos_usados += 5
                 else:
                     status.update(label="❌ Error crítico en el pipeline", state="error")
-                    mensaje_err = resultado.get("mensaje") if resultado else "Error inesperado (retornó None)"
+                    mensaje_err = resultado.get("mensaje") if resultado else "Error desconocido (La respuesta retornó vacía)."
                     st.error(mensaje_err)
 
     if "resultado_lote" in st.session_state and "tarea_id" in st.session_state:
@@ -171,7 +157,6 @@ with col_der:
                 
         if res and "clips" in res:
             st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos con alta probabilidad viral:**")
-                    
             nombres_pestanas = [f"Clip {i+1} ({c['score']})" for i, c in enumerate(res["clips"])]
             pestanas = st.tabs(nombres_pestanas)
                     
@@ -179,7 +164,6 @@ with col_der:
                 with pestanas[idx]:
                     st.markdown("<div class='clip-card'>", unsafe_allow_html=True)
                     st.metric(label="Score de Virabilidad Potencial", value=c["score"])
-                                    
                     st.write("**Reporte de Indexación:**")
                     for r in c["reporte"]:
                         st.write(f"- {r}")
@@ -188,15 +172,11 @@ with col_der:
                     if os.path.exists(ruta_video):
                         with open(ruta_video, "rb") as vf:
                             st.video(vf.read())
-                                            
                         with open(ruta_video, "rb") as vf:
                             st.download_button(
-                                label=f"📥 Descargar Clip {idx + 1}",
-                                data=vf,
-                                file_name=c["archivo"],
-                                mime="video/mp4",
-                                key=f"dl_{idx}"
+                                label=f"📥 Descargar Clip {idx + 1}", data=vf,
+                                file_name=c["archivo"], mime="video/mp4", key=f"dl_{idx}"
                             )
                     else:
-                        st.error("No se pudo localizar el archivo físico de este fragmento.")
+                        st.error("No se pudo localizar el archivo físico.")
                     st.markdown("</div>", unsafe_allow_html=True)
