@@ -140,7 +140,7 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
                 "end": float(w["end"]),
                 "text": str(w["word"]).strip()
             })
-    return segmentos_palabras
+    return segments_palabras
 
 def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
     cap = cv2.VideoCapture(video_path)
@@ -201,8 +201,6 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
     ventanas = []
     paso_tiempo = 10.0 
     
-    # --- PARCHE DE ESCALARES NATIVOS ---
-    # Usamos bucles estándar de Python en lugar de np.arange para evitar heredar numpy.float64
     inicio_bloque = 0.0
     while inicio_bloque < (duracion_total - 15.0):
         fin_bloque = min(float(duracion_total), inicio_bloque + 30.0)
@@ -292,7 +290,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = float(plan["start"]), float(plan["end"])
             
-            chunk = clip_completo.subclip(t_ini, t_fin)
+            # --- CORRECCIÓN CLAVE MOVIEPY v2.0 ---
+            chunk = clip_completo.slice(t_ini, t_fin)
             duracion_chunk = float(chunk.duration)
             
             if "9:16" in formato or "Short" in formato:
@@ -361,7 +360,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             video_final.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
             video_final.close()
             
-            # Forzamos la puntuación a un entero limpio de Python para evitar el error de escalar en st.tabs / st.metric
             clips_processed.append({
                 "archivo": nombre_archivo,
                 "score": int(plan["score"]),
