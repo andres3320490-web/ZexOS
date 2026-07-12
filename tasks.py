@@ -2,7 +2,6 @@ import os
 import sys
 import subprocess
 
-# --- PARCHE DE COMPATIBILIDAD CRÍTICO PARA INFRAESTRUCTURAS MODERNAS ---
 try:
     import pkg_resources
 except ImportError:
@@ -15,12 +14,10 @@ import yt_dlp
 import numpy as np
 import whisper
 
-# Importaciones directas para evitar el cuello de botella de moviepy.editor
 from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.VideoClip import TextClip, ColorClip
+from moviepy.video.VideoClip import ColorClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 
-# Ajuste manual para que moviepy localice ffmpeg sin depender de módulos rotos
 try:
     import imageio_ffmpeg
     os.environ["IMAGEIO_FFMPEG_EXE"] = imageio_ffmpeg.get_ffmpeg_exe()
@@ -28,16 +25,6 @@ except:
     pass
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
-EMOJI_DICTIONARY = {"dinero": "💰", "fuego": "🔥", "viral": "🔥", "éxito": "🚀", "brutal": "🤯", "error": "❌"}
-
-def garantizar_fuente_fisica():
-    os.makedirs("storage", exist_ok=True)
-    ruta = os.path.abspath("storage/font.ttf")
-    if not os.path.exists(ruta):
-        url = "https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf"
-        r = requests.get(url)
-        with open(ruta, "wb") as f: f.write(r.content)
-    return ruta
 
 def garantizar_entorno_tarea(tarea_id):
     path = os.path.join("storage", tarea_id)
@@ -84,8 +71,6 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
     if url_remoto: 
         ruta_video_master = descargar_video_remoto(url_remoto, dir_t)
     
-    font_p = garantizar_fuente_fisica()
-    
     if not os.path.exists(ruta_video_master):
         return {"status": "error", "mensaje": "El archivo de video maestro no fue localizado."}
         
@@ -93,12 +78,16 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
     palabras = transcribir_video_por_palabras(ruta_video_master) if con_subtitulos else []
     planes = mapear_mejores_clips(palabras, master.duration)
     
+    # Convertir color Hex a BGR para OpenCV
+    hex_c = color_sub_hex.lstrip('#')
+    rgb_c = tuple(int(hex_c[i:i+2], 16) for i in (0, 2, 4))
+    bgr_color = (rgb_c[2], rgb_c[1], rgb_c[0])
+
     final_clips = []
     for i, p in enumerate(planes):
         t_ini, t_fin = p['start'], p['end']
         chunk = master.subclip(t_ini, t_fin)
         
-        # 1. AUTO-REENCUADRE & INTERPOLACIÓN ANTI-TIRONES
         tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
         w, h = chunk.size
         tw = int(h * (9/16)) if "9:16" in formato else w
@@ -109,6 +98,7 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
             frame = get_frame(t)
             gray_actual = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             
+            # Algoritmo Anti-Trabado
             if cache_video["ultimo_frame"] is not None and cache_video["prev_gray"] is not None:
                 diff = cv2.absdiff(gray_actual, cache_video["prev_gray"])
                 if np.mean(diff) < 1.0 and t > cache_video["ultimo_t"]:
@@ -124,11 +114,34 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
             cache_video["ultimo_frame"] = frame.copy()
             cache_video["prev_gray"] = gray_actual.copy()
             
+            # Recorte 9:16 Dinámico
             if "9:16" in formato:
                 idx = min(int(t * tracking['fps']), len(tracking['coordenadas'])-1)
                 cx = tracking['coordenadas'][idx]
                 x1 = max(0, min(w - tw, cx - (tw//2)))
-                return frame[:, x1:x1+tw]
+                frame = frame[:, x1:x1+tw]
+
+            # Inyección Nativa de Subtítulos con OpenCV (Evita usar ImageMagick por completo)
+            if con_subtitulos:
+                t_global = t_ini + t
+                for word in palabras:
+                    if word['start'] <= t_global <= word['end']:
+                        texto = word['text'].upper()
+                        fuente = cv2.FONT_HERSHEY_DUPLEX
+                        escala = 1.3
+                        grosor = 3
+                        tam, _ = cv2.getTextSize(texto, fuente, escala, grosor)
+                        
+                        # Ubicación centrada inferior
+                        tx = (frame.shape[1] - tam[0]) // 2
+                        ty = int(frame.shape[0] * 0.75)
+                        
+                        # Borde negro de contraste
+                        cv2.putText(frame, texto, (tx, ty), fuente, escala, (0, 0, 0), grosor + 4, cv2.LINE_AA)
+                        # Texto Principal Color Personalizado
+                        cv2.putText(frame, texto, (tx, ty), fuente, escala, bgr_color, grosor, cv2.LINE_AA)
+                        break
+
             return frame
             
         chunk = chunk.fl(procesar_cuadro_avanzado, keep_duration=True)
@@ -142,15 +155,7 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
             
         prog_bar = ColorClip(size=(chunk.size[0], 6), col=(0,0,0)).fl(make_bar, keep_duration=True).set_duration(chunk.duration).set_position(('left', 'bottom'))
 
-        # 3. CAPA DE SUBTÍTULOS
-        comps = [chunk, prog_bar]
-        if con_subtitulos:
-            for word in [w for w in palabras if t_ini <= w['start'] < t_fin]:
-                txt = TextClip(word['text'].upper(), fontsize=48, color=color_sub_hex, font=font_p, size=(chunk.size[0]-40, None), method="caption")
-                txt = txt.set_start(word['start']-t_ini).set_duration(max(0.1, word['end']-word['start'])).set_position(('center', int(chunk.size[1]*0.7)))
-                comps.append(txt)
-
-        final_v = CompositeVideoClip(comps).set_duration(chunk.duration)
+        final_v = CompositeVideoClip([chunk, prog_bar]).set_duration(chunk.duration)
         fname = f"clip_{i+1}.mp4"
         final_v.write_videofile(os.path.join(dir_t, fname), fps=30, codec="libx264", audio_codec="aac", logger=None)
         final_v.close()
