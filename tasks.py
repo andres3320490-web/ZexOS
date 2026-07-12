@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import torch
 import yt_dlp
@@ -6,11 +7,22 @@ import requests
 import numpy as np
 import whisper
 
-# Importación directa para MoviePy 2.0.0
+# ==============================================================================
+# 🛠️ PARCHE CRÍTICO: Configuración de FFmpeg para Servidores Cloud (Streamlit)
+# ==============================================================================
+if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
+    try:
+        import imageio_ffmpeg
+        os.environ["IMAGEIO_FFMPEG_EXE"] = imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        pass
+
+# Importación directa y segura para MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
+# Diccionario inteligente para la inyección automática de Emojis de Retención
 EMOJI_DICTIONARY = {
     "dinero": "💰", "fuego": "🔥", "viral": "🔥", "ganar": "🏆",
     "secreto": "🤫", "atención": "🚨", "mira": "👀", "importante": "⚠️",
@@ -22,6 +34,7 @@ EMOJI_DICTIONARY = {
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "hoy", "increíble", "revelado", "atención", "importante"}
 
 def garantizar_fuente_fisica() -> str:
+    """Descarga una fuente TTF tipográfica real para evitar problemas con fuentes del sistema."""
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
     ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
@@ -56,6 +69,9 @@ def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
 
+# ==============================================================================
+# 🔥 MEJORA IA 1: Transcripción de Audio Real (Estilo Opus Clip / Wisecut)
+# ==============================================================================
 def transcribir_video_por_palabras(ruta_video: str) -> list:
     """Utiliza OpenAI Whisper para mapear palabras con timestamps de forma milimétrica."""
     print(f"📦 Cargando modelo Whisper en {DISPOSITIVO}...")
@@ -73,10 +89,13 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
             })
     return segmentos_palabras
 
+# ==============================================================================
+# 🔥 MEJORA IA 2: Visión Artificial y Multi-Tracking Cinemático de Rostros
+# ==============================================================================
 def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
     """
-    MEJORA MULTI-TRACKING: Rastrea múltiples rostros simultáneamente, calcula 
-    el baricentro (centro de masa) de la escena y suaviza el movimiento por inercia.
+    Rastrea múltiples rostros simultáneamente, calcula el centro promedio 
+    de masa de la escena y suaviza el movimiento por inercia física (paneo fluido).
     """
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -92,13 +111,13 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
         ret, frame = cap.read()
         if not ret: break
             
-        if f_idx % 4 == 0:  # Mayor frecuencia de muestreo para un tracking preciso
+        if f_idx % 4 == 0:  # Muestreo acelerado
             try:
                 gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (0, 0), fx=0.25, fy=0.25)
                 faces = cascade_humano.detectMultiScale(gray, 1.2, 5)
                 
                 if len(faces) > 0:
-                    # Multi-tracking: calculamos el centro ponderado de todos los rostros en escena
+                    # Multi-tracking: baricentro exacto de todos los rostros detectados
                     centros_x = [int((x + w // 2) * 4) for (x, _, w, _) in faces]
                     centro_escena = int(np.mean(centros_x))
                     centros_fotogramas.append(centro_escena)
@@ -116,21 +135,27 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
     
     if not centros_fotogramas: centros_fotogramas = [ancho_orig // 2]
     
-    # Filtro cinemático de suavizado (Inercia de cámara)
+    # Algoritmo de suavizado cinemático
     suavizados = []
     pos_actual = centros_fotogramas[0]
     for pos_detectada in centros_fotogramas:
         distancia = pos_detectada - pos_actual
-        # Cuanto más grande sea el salto (ej. cambio de plano), más rápido se desplaza la cámara
         factor_inercia = 0.60 if abs(distancia) > (ancho_orig // 4) else 0.15
         pos_actual += int(distancia * factor_inercia)
         suavizados.append(pos_actual)
             
     return {"coordenadas": suavizados, "fps": fps}
 
+# ==============================================================================
+# 🔥 MEJORA IA 3: Curación de Clips Cortos Adaptativa y Puntuación Viral
+# ==============================================================================
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
+    """
+    Si el video es corto, no lo rompe y procesa el 100%. Si es largo, analiza 
+    las métricas de velocidad verbal (WPM) y palabras clave para aislar los mejores ganchos.
+    """
     if duracion_total < 25.0 or not segmentos_palabras:
-        return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración."]}]
+        return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración del video."]}]
     
     ventanas = []
     paso_tiempo = 10.0 
@@ -179,6 +204,9 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
             
     return clips_filtrados if clips_filtrados else [{"start": 0.0, "end": duracion_total, "score": 85, "reasons": ["Segmento óptimo adaptado."]}]
 
+# ==============================================================================
+# 🚀 PIPELINE DE PROCESAMIENTO MULTI-CAPA DEFINITIVO
+# ==============================================================================
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_processed = []
@@ -207,7 +235,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             chunk = clip_completo[t_ini:t_fin]
             duracion_chunk = chunk.duration
             
-            # Reencuadre dinámico 9:16 usando los datos del Multi-Tracking
+            # Reencuadre dinámico inteligente asistido por el Multi-Tracking de la cámara
             if "9:16" in formato or "Short" in formato:
                 tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
                 w_orig, h_orig = chunk.size
@@ -232,6 +260,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         w_start = w_info["start"] - t_ini
                         w_end = w_info["end"] - t_ini
                         
+                        # Blindaje matemático matemático anti-desbordamientos en videos cortos
                         techo_maximo = duracion_chunk - 0.02
                         if w_start >= techo_maximo: continue
                             
@@ -264,6 +293,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         componentes_chunk.append(txt_clip)
             
+            # SOLUCIÓN CRÍTICA PARA MOVIEPY 2.0.0: Renderizar con duración forzada restrictiva (.with_duration)
             video_final = CompositeVideoClip(componentes_chunk).with_duration(duracion_chunk)
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
