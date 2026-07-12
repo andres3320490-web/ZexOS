@@ -244,3 +244,32 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         txt_clip = (txt_clip
                                     .with_duration(duracion_sub)
                                     .with_start(w_start)
+                                    .with_position(('center', int(chunk.size[1] * 0.72))))
+                        
+                        def animar_subtitulo(image):
+                            return image
+                            
+                        txt_clip = txt_clip.image_transform(animar_subtitulo)
+                        componentes_chunk.append(txt_clip)
+            
+            # CORRECCIÓN DE MOVIEPY 2.0.0:
+            # Eliminamos 'duration' del inicializador y lo aplicamos usando el método encadenado '.with_duration()'
+            video_final = CompositeVideoClip(componentes_chunk).with_duration(duracion_chunk)
+            
+            nombre_archivo = f"clip_{idx + 1}_viral.mp4"
+            ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
+            
+            video_final.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
+            video_final.close()
+            
+            clips_processed.append({
+                "archivo": nombre_archivo,
+                "score": f"{plan['score']}%",
+                "reporte": plan["reasons"]
+            })
+            
+        clip_completo.close()
+        return {"status": "success", "clips": clips_processed}
+        
+    except Exception as err:
+        return {"status": "error", "mensaje": str(err)}
