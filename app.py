@@ -1,24 +1,16 @@
-import subprocess
-import sys
 import os
-
-# --- PARCHE DE COMPILACIÓN INTERNO PARA PILLOW ---
-try:
-    from PIL import Image
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--only-binary=:all:", "pillow"])
-
+import sys
 import uuid
 import streamlit as st
 from streamlit_cookies_controller import CookieController
 
-# Asegurar importación limpia del módulo local tasks.py
+# Asegurar importación del módulo local
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
 
 cookie_controller = CookieController()
 
-# --- TU DISEÑO Y ESTILO ORIGINAL ---
+# --- CONFIGURACIÓN VISUAL ORIGINAL ---
 st.set_page_config(page_title="ZexOS AI Studio", page_icon="⚡", layout="wide")
 
 st.markdown("""
