@@ -23,14 +23,18 @@ def obtener_ruta_fuente_real() -> str:
     """Descarga una fuente física TTF real y devuelve su ruta absoluta para Pillow/MoviePy."""
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
-    ruta_archivo_fuente = os.path.join(directorio_storage, "ImpactoViral.ttf")
+    ruta_archivo_fuente = os.path.join(directorio_storage, "Roboto-Bold.ttf")
+    
+    # Si el archivo existe pero mide menos de 10KB, está corrupto y se borra
+    if os.path.exists(ruta_archivo_fuente) and os.path.getsize(ruta_archivo_fuente) < 10000:
+        os.remove(ruta_archivo_fuente)
     
     if not os.path.exists(ruta_archivo_fuente):
-        # Descarga una versión de Roboto Bold estable desde un CDN público seguro
-        url_fuente = "https://cdn.jsdelivr.net/fontsource/fonts/roboto@latest/files/roboto-latin-700-normal.ttf"
+        # URL directa y oficial del repositorio de Google Fonts (sin intermediarios de CDN)
+        url_fuente = "https://github.com/google/fonts/raw/main/apache/roboto/static/Roboto-Bold.ttf"
         try:
             respuesta = requests.get(url_fuente, timeout=15)
-            if respuesta.status_code == 200:
+            if respuesta.status_code == 200 and len(respuesta.content) > 10000:
                 with open(ruta_archivo_fuente, "wb") as archivo:
                     archivo.write(respuesta.content)
         except Exception:
@@ -150,7 +154,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_procesados = []
     
-    # Resolver la ruta del archivo físico de fuente descargado en runtime
+    # Resolver la ruta limpia del archivo de fuente
     ruta_fuente_validada = obtener_ruta_fuente_real()
         
     try:
@@ -216,7 +220,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # PASO CRÍTICO: Pasamos la ruta física exacta del archivo .ttf descargado.
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
