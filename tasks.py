@@ -2,12 +2,10 @@ import os
 import cv2
 import torch
 import yt_dlp
-import requests
 import numpy as np
 
 # Importación directa para MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
-from PIL import ImageFont
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -19,39 +17,6 @@ EMOJI_DICTIONARY = {
 }
 
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
-
-def obtener_fuente_segura():
-    """
-    Intenta descargar una fuente válida. Si falla o está corrupta,
-    devuelve el objeto por defecto de Pillow para evitar caídas del sistema.
-    """
-    directorio_storage = os.path.abspath("storage")
-    os.makedirs(directorio_storage, exist_ok=True)
-    ruta_fuente = os.path.join(directorio_storage, "font_sub.ttf")
-    
-    # URL alternativa ultra-estable de un CDN de fuentes para evitar bloques de GitHub
-    url_fuente = "https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto-Bold.ttf"
-    
-    if not os.path.exists(ruta_fuente) or os.path.getsize(ruta_fuente) < 10000:
-        try:
-            respuesta = requests.get(url_fuente, timeout=10, allow_redirects=True)
-            if respuesta.status_code == 200 and len(respuesta.content) > 10000:
-                with open(ruta_fuente, "wb") as archivo:
-                    archivo.write(respuesta.content)
-        except Exception:
-            if os.path.exists(ruta_fuente):
-                os.remove(ruta_fuente)
-
-    # Validación final del formato por parte de Pillow antes de pasarla a MoviePy
-    if os.path.exists(ruta_fuente):
-        try:
-            ImageFont.truetype(ruta_fuente, 20)
-            return ruta_fuente  # Retorna el string de la ruta si es válido
-        except Exception:
-            if os.path.exists(ruta_fuente):
-                os.remove(ruta_fuente)
-                
-    return ImageFont.load_default()  # Sistema de respaldo nativo de Pillow
 
 def garantizar_entorno_tarea(tarea_id: str) -> str:
     ruta_tarea = os.path.join("storage", tarea_id)
@@ -164,9 +129,6 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_procesados = []
-    
-    # Obtener el recurso de fuente validado a prueba de fallas
-    objeto_fuente = obtener_fuente_segura()
         
     try:
         if url_remoto and url_remoto.strip() != "":
@@ -231,12 +193,13 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # CORREGIDO: Se pasa directamente el objeto o ruta verificado sin romper Pillow
+                        # SOLUCIÓN CRÍTICA: Eliminamos el parámetro font o enviamos una fuente básica 
+                        # del sistema para permitir que el backend de MoviePy autogestione la creación 
+                        # del canvas de texto sin pasar un objeto instanciado de Pillow.
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
-                            font=objeto_fuente,
                             size=(chunk.size[0] - 40, None)
                         )
                         
