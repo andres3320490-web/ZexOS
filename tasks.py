@@ -97,14 +97,15 @@ def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fi
     return {"data": lambda t: suavizados[min(int(t * (fps / 6)), len(suavizados) - 1)]}
 
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
-    if not segmentos_palabras:
-        return [{"start": 0, "end": min(30.0, duracion_total), "score": 85, "reasons": ["Segmento óptimo detectado."]}]
+    # CORRECCIÓN: Si el video es más corto que la ventana estándar (20-30s), procesamos todo el video directamente
+    if duracion_total < 20.0 or not segmentos_palabras:
+        return [{"start": 0.0, "end": duracion_total, "score": 95, "reasons": ["Video corto adaptado al 100%."]}]
     
     ventanas = []
     paso_tiempo = 15.0 
     
     for inicio_bloque in np.arange(0, duracion_total - 20.0, paso_tiempo):
-        fin_bloque = inicio_bloque + 30.0
+        fin_bloque = min(duracion_total, inicio_bloque + 30.0)
         palabras_bloque = [w for w in segmentos_palabras if inicio_bloque <= w["start"] <= fin_bloque]
         
         if len(palabras_bloque) < 5: continue
@@ -146,7 +147,7 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
             clips_filtrados.append(v)
             if len(clips_filtrados) >= max_clips: break
             
-    return clips_filtrados if clips_filtrados else [{"start": 0, "end": min(30.0, duracion_total), "score": 85, "reasons": ["Segmento único optimizado."]}]
+    return clips_filtrados if clips_filtrados else [{"start": 0.0, "end": duracion_total, "score": 85, "reasons": ["Segmento adaptado."]}]
 
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
@@ -171,17 +172,24 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                 "BRUTAL CAMBIO AHORA", "INCREMENTA TU ÉXITO", "NUNCA ANTES VISTO"
             ]
             
-            for i, t_seg in enumerate(np.arange(0.5, duracion_total - 1.5, 3.0)):
+            # CORRECCIÓN: El paso de tiempo se ajusta para que no intente desbordar videos cortos
+            intervalo = 2.0 if duracion_total < 20.0 else 3.0
+            for i, t_seg in enumerate(np.arange(0.2, max(0.5, duracion_total - 1.0), intervalo)):
                 texto_frase = frases_ejemplo[i % len(frases_ejemplo)]
                 palabras = texto_frase.split()
-                duracion_palabra = 2.5 / len(palabras)
+                duracion_palabra = min(0.4, (intervalo - 0.2) / len(palabras))
                 
                 for j, pal in enumerate(palabras):
-                    segmentos_palabras.append({
-                        "start": float(t_seg + (j * duracion_palabra)),
-                        "end": float(t_seg + ((j + 1) * duracion_palabra)),
-                        "text": pal
-                    })
+                    t_word_start = float(t_seg + (j * duracion_palabra))
+                    t_word_end = float(t_word_start + duracion_palabra)
+                    
+                    # Si la palabra excede la duración total real, no la añadimos
+                    if t_word_start < duracion_total:
+                        segmentos_palabras.append({
+                            "start": t_word_start,
+                            "end": min(duracion_total, t_word_end),
+                            "text": pal
+                        })
                     
         planes_de_corte = mapear_mejores_clips(segmentos_palabras, duracion_total)
         
@@ -209,22 +217,15 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         w_start = w_info["start"] - t_ini
                         w_end = w_info["end"] - t_ini
                         
-                        # LÍMITE ABSOLUTO: El video no puede leer más allá de duracion_chunk - 0.02
                         techo_maximo = duracion_chunk - 0.02
                         
-                        # Si por redondeo el inicio ya está fuera, lo descartamos
                         if w_start >= techo_maximo:
                             continue
                             
                         w_start = max(0.0, w_start)
                         w_end = min(techo_maximo, w_end)
-                        
-                        # Calculamos la duración base
                         duracion_sub = max(0.05, w_end - w_start)
                         
-                        # CORRECCIÓN MATEMÁTICA ANTI-CRASH:
-                        # Si el tiempo final calculado (w_start + duracion_sub) excede el techo del video,
-                        # reducimos el tiempo de inicio hacia atrás para asegurar que el bloque quepa perfectamente.
                         if (w_start + duracion_sub) > techo_maximo:
                             w_start = max(0.0, techo_maximo - duracion_sub)
                         
@@ -253,8 +254,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                             
                         txt_clip = txt_clip.image_transform(animar_subtitulo)
                         componentes_chunk.append(txt_clip)
-                        
-            video_final = CompositeVideoClip(componentes_chunk)
+            
+            video_final = CompositeVideoClip(componentes_chunk, duration=duracion_chunk)
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
             
