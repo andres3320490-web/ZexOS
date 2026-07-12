@@ -20,7 +20,7 @@ EMOJI_DICTIONARY = {
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
 
 def garantizar_fuente_fisica() -> str:
-    """Descarga una fuente TTF real y devuelve la ruta absoluta del archivo."""
+    """Descarga una fuente TTF real y devuelve la ruta absoluta del archivo para Pillow/MoviePy."""
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
     ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
@@ -205,9 +205,19 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             
             if con_subtitulos:
                 for w_info in segmentos_palabras:
-                    if t_ini <= w_info["start"] <= t_fin:
-                        w_start = max(0.0, w_info["start"] - t_ini)
-                        w_end = min(duracion_chunk, w_info["end"] - t_ini)
+                    if t_ini <= w_info["start"] < t_fin:
+                        w_start = w_info["start"] - t_ini
+                        w_end = w_info["end"] - t_ini
+                        
+                        # Margen estricto para evitar rebasar los límites del video en milisegundos
+                        margen_seguridad = duracion_chunk - 0.05
+                        
+                        if w_start >= margen_seguridad:
+                            continue
+                            
+                        w_start = max(0.0, w_start)
+                        w_end = min(margen_seguridad, w_end)
+                        duracion_sub = max(0.1, w_end - w_start)
                         
                         word_raw = w_info["text"].strip()
                         palabra_limpia = word_raw.lower().strip(".,¡!¿?")
@@ -224,10 +234,9 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                             size=(chunk.size[0] - 40, None)
                         )
                         
-                        # CORRECCIÓN AQUÍ: Cambiados .set_duration(), .set_start() y .set_position() 
-                        # por los métodos requeridos en MoviePy 2.0.0: with_duration(), with_start() y with_position()
+                        # Sintaxis fluida adaptada a MoviePy 2.0.0
                         txt_clip = (txt_clip
-                                    .with_duration(max(0.15, w_end - w_start))
+                                    .with_duration(duracion_sub)
                                     .with_start(w_start)
                                     .with_position(('center', int(chunk.size[1] * 0.72))))
                         
