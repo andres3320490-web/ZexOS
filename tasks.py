@@ -8,14 +8,18 @@ import numpy as np
 import whisper
 
 # ==============================================================================
-# 🛠️ PARCHE CRÍTICO: Configuración de FFmpeg para Servidores Cloud (Streamlit)
+# 🛠️ PARCHE INTEGRAL DEFINITIVO: Configuración Forzada de FFmpeg en MoviePy 2.0
 # ==============================================================================
-if not os.environ.get("IMAGEIO_FFMPEG_EXE"):
-    try:
-        import imageio_ffmpeg
-        os.environ["IMAGEIO_FFMPEG_EXE"] = imageio_ffmpeg.get_ffmpeg_exe()
-    except ImportError:
-        pass
+try:
+    import imageio_ffmpeg
+    ruta_ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_ffmpeg
+    
+    # Forzar directamente la configuración interna de MoviePy 2.0
+    from moviepy.config import change_settings
+    change_settings({"FFMPEG_BINARY": ruta_ffmpeg})
+except Exception as e:
+    print(f"Advertencia al configurar FFmpeg: {e}")
 
 # Importación directa y segura para MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
@@ -210,7 +214,7 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_processed = []
-    ruta_fuente_absoluta = garantizar_fuente_fisica()
+    ruta_fuente_absoluta = garantizar_fuente_physica()
         
     try:
         if url_remoto and url_remoto.strip() != "":
@@ -260,7 +264,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         w_start = w_info["start"] - t_ini
                         w_end = w_info["end"] - t_ini
                         
-                        # Blindaje matemático matemático anti-desbordamientos en videos cortos
+                        # Blindaje matemático anti-desbordamientos en videos cortos
                         techo_maximo = duracion_chunk - 0.02
                         if w_start >= techo_maximo: continue
                             
