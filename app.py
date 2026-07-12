@@ -2,8 +2,7 @@ import subprocess
 import sys
 import os
 
-# --- PARCHE DE CONTINGENCIA ANTIBLOQUEOS ---
-# Fuerza la instalación del binario precompilado de Pillow antes de arrancar todo lo demás
+# --- PARCHE INTERNO CONTRA ERRORES (Invisible en la página) ---
 try:
     from PIL import Image
 except ImportError:
@@ -12,79 +11,54 @@ except ImportError:
 import streamlit as st
 import uuid
 
-# Asegurar que Streamlit encuentre los módulos locales en su ruta
+# Asegurar rutas locales del servidor
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
 
-st.set_page_config(page_title="Clon de Opus Clip", page_icon="✂️", layout="wide")
+# --- TU CONFIGURACIÓN Y ESTILO ORIGINAL ---
+st.set_page_config(page_title="Opus Clip Clone", page_icon="✂️", layout="centered")
 
-st.title("✂️ Clon de Opus Clip - Creador de Shorts")
-st.subheader("Corta tus videos largos y conviértelos en clips virales con subtítulos automáticos")
+st.title("✂️ Opus Clip Clone")
+st.markdown("### Genera tus clips virales en segundos")
 
-# Crear directorios base si no existen
-os.makedirs("storage", exist_ok=True)
+# Estructura e inputs tal cual los tenías
+url_video = st.text_input("Introduce la URL del video largo:")
+formato = st.selectbox("Formato de salida:", ["9:16", "1:1"])
+con_subtitulos = st.checkbox("¿Incluir subtítulos?", value=True)
+color_sub_hex = st.color_picker("Color de los subtítulos destacados:", "#deff9a")
+estilo_subtitulos = st.selectbox("Estilo:", ["hormozi", "estandar"])
+diccionario_manual = st.text_input("Ganchos o palabras clave adicionales (opcional):")
 
-# Formulario de entrada
-with st.form("formulario_opus"):
-    url_video = st.text_input("🔗 URL del video (YouTube o enlace directo mp4):", placeholder="https://www.youtube.com/watch?v=...")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        formato = st.selectbox("📐 Formato del Short:", ["9:16 (Vertical para TikTok/Reels)", "1:1 (Cuadrado)"])
-    with col2:
-        estilo_sub = st.selectbox("🎨 Estilo de Subtítulos:", ["Hormozi (Grande y Llamativo)", "Estándar (Limpio)"])
+if st.button("Procesar Video"):
+    if url_video:
+        tarea_id = str(uuid.uuid4())
         
-    color_sub = st.color_picker("🎨 Color de palabras clave:", "#deff9a")
-    diccionario_extra = st.text_input("🔑 Palabras clave adicionales (separadas por coma):", placeholder="ganancia, brutal, hack")
-    
-    boton_procesar = st.form_submit_button("🚀 Generar Clips Virales")
-
-if boton_procesar:
-    if not url_video.strip():
-        st.error("Por favor, introduce una URL válida.")
-    else:
-        id_tarea = str(uuid.uuid4())[:8]
-        
-        with st.spinner("🔄 Procesando video, analizando rostros y generando subtítulos... (Esto puede tardar un momento)"):
+        with st.spinner("Procesando..."):
             resultado = pipeline_procesamiento_masivo(
-                tarea_id=id_tarea,
+                tarea_id=tarea_id,
                 ruta_video_master="",
                 formato=formato,
-                con_subtitulos=True,
-                color_sub_hex=color_sub,
-                estilo_subtitulos="hormozi" if "Hormozi" in estilo_sub else "estandar",
+                con_subtitulos=con_subtitulos,
+                color_sub_hex=color_sub_hex,
+                estilo_subtitulos=estilo_subtitulos,
                 url_remoto=url_video,
-                diccionario_manual=diccionario_extra
+                diccionario_manual=diccionario_manual
             )
             
         if resultado["status"] == "success":
-            st.success("✨ ¡Clips generados con éxito!")
-            
+            st.success("¡Completado con éxito!")
             for clip in resultado["clips"]:
-                ruta_descarga = os.path.join("storage", id_tarea, clip["archivo"])
+                st.write(f"**Clip:** {clip['archivo']} - **Score:** {clip['score']}")
+                for rep in clip["reporte"]:
+                    st.write(f"- {rep}")
                 
-                with st.container():
-                    st.write("---")
-                    c1, c2 = st.columns([1, 2])
-                    with c1:
-                        st.metric(label="Viral Score", value=clip["score"])
-                        st.subheader("Análisis del Clip:")
-                        for r in clip["reporte"]:
-                            st.write(r)
-                            
-                        if os.path.exists(ruta_descarga):
-                            with open(ruta_descarga, "rb") as file:
-                                st.download_button(
-                                    label=f"📥 Descargar {clip['archivo']}",
-                                    data=file,
-                                    file_name=clip["archivo"],
-                                    mime="video/mp4"
-                                )
-                    with c2:
-                        if os.path.exists(ruta_descarga):
-                            st.video(ruta_descarga)
-                        else:
-                            st.error("El archivo del clip no se pudo localizar.")
+                ruta_clip = os.path.join("storage", tarea_id, clip["archivo"])
+                if os.path.exists(ruta_clip):
+                    st.video(ruta_clip)
+                    with open(ruta_clip, "rb") as f:
+                        st.download_button(f"Descargar {clip['archivo']}", f, file_name=clip["archivo"])
         else:
-            st.error(f"Ocurrió un error en el procesamiento: {resultado['mensaje']}")
+            st.error(f"Error: {resultado['mensaje']}")
+    else:
+        st.warning("Por favor introduce una URL.")
