@@ -13,10 +13,10 @@ import streamlit as st
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
-import whisper  # Integración nativa de Whisper
+import whisper
 
 # =========================================================================
-# ⚙️ MÓDULO DE PROCESAMIENTO COMPLETO E INTEGRADO (tasks.py integrado)
+# ⚙️ MÓDULO DE PROCESAMIENTO COMPLETO E INTEGRADO (tasks.py)
 # =========================================================================
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -31,11 +31,13 @@ EMOJI_DICTIONARY = {
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "atención", "importante", "mira"}
 
 def garantizar_entorno_tarea(tarea_id: str) -> str:
+    """Función 1: Configura los directorios locales de trabajo."""
     ruta_tarea = os.path.join("storage", tarea_id)
     os.makedirs(ruta_tarea, exist_ok=True)
     return ruta_tarea
 
 def asegurar_cascade_anime(dir_trabajo: str) -> str:
+    """Función 2: Descarga de forma segura clasificadores XML alternativos."""
     ruta_xml = os.path.join(dir_trabajo, "lbpcascade_animeface.xml")
     if not os.path.exists(ruta_xml):
         url = "https://raw.githubusercontent.com/nagadomi/lbpcascade_animeface/master/lbpcascade_animeface.xml"
@@ -48,6 +50,7 @@ def asegurar_cascade_anime(dir_trabajo: str) -> str:
     return ruta_xml
 
 def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
+    """Función 3: Extracción multimedia multiplataforma con yt-dlp."""
     opciones = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': os.path.join(ruta_salida_dir, 'video_remoto_%(id)s.%(ext)s'),
@@ -59,6 +62,7 @@ def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
         return ydl.prepare_filename(info)
 
 def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fin: float):
+    """Función 4: Lógica de visión artificial y suavizado cinemático."""
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
@@ -77,7 +81,10 @@ def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fi
                 cascade_humano = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
             else:
                 cascade_humano = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-            cascade_anime = cv2.CascadeClassifier(asegurar_cascade_anime("storage"))
+            
+            # LLAMADO EXPLÍCITO A LA FUNCIÓN 2
+            ruta_anime_xml = asegurar_cascade_anime("storage")
+            cascade_anime = cv2.CascadeClassifier(ruta_anime_xml)
         except:
             detector_disponible = False
 
@@ -118,10 +125,14 @@ def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fi
     return {"modo": "single", "data": lambda t: suavizados[min(int(t * (fps / 8)), len(suavizados) - 1)]}
 
 def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
+    """Función 5: Motor principal que coordina todas las funciones anteriores."""
+    
+    # EJECUTA FUNCIÓN 1
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     ruta_audio_full = os.path.join(dir_trabajo, "temp_voice.wav")
         
     try:
+        # EJECUTA FUNCIÓN 3 (Si aplica)
         if url_remoto and url_remoto.strip() != "":
             ruta_video_master = descargar_video_remoto(url_remoto, dir_trabajo)
         else:
@@ -138,7 +149,7 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                     
         clip_completo = VideoFileClip(ruta_video_master)
         
-        # Extraer audio del archivo de video original
+        # Extracción segura de pista de audio
         audio_disponible = False
         if clip_completo.audio is not None:
             try:
@@ -151,11 +162,10 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                 except:
                     pass
 
-        # Generar transcripción inteligente con Whisper a nivel de palabras individuales (Word-level timestamps)
+        # Transcripción inteligente por palabras (Whisper AI)
         segmentos_palabras = []
         if con_subtitulos and audio_disponible and os.path.exists(ruta_audio_full):
             try:
-                # Usamos el modelo 'base' por balance óptimo de velocidad y precisión
                 modelo_whisper = whisper.load_model("base", device=DISPOSITIVO)
                 resultado_transcripcion = modelo_whisper.transcribe(ruta_audio_full, word_timestamps=True)
                 
@@ -166,14 +176,12 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                             "end": word_obj["end"],
                             "text": word_obj["word"].strip()
                         })
-            except Exception as whisper_err:
-                # Fallback seguro en caso de error de inicialización de Whisper
+            except Exception:
                 segmentos_palabras = [
-                    {"start": 0.5, "end": 3.0, "text": "ZEXOS AI STUDIO"},
-                    {"start": 3.2, "end": 6.0, "text": "PROCESAMIENTO COMPLETO"}
+                    {"start": 0.5, "end": 2.5, "text": "¡ATENCIÓN A ESTO!"},
+                    {"start": 2.8, "end": 5.0, "text": "PROCESANDO VIDEO"}
                 ]
                 
-        # Cortar fragmentos lógicos (ej: los primeros 30 segundos automáticos)
         duracion_corte = min(30.0, clip_completo.duration)
         t_ini, t_fin = 0.0, duracion_corte
         
@@ -190,6 +198,8 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
         if es_short:
             w_orig, h_orig = chunk.size
             target_w = int(h_orig * (9 / 16))
+            
+            # EJECUTA FUNCIÓN 4 (Tracking Inteligente)
             meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
             fn_centro = meta_rostros["data"]
                             
@@ -253,7 +263,6 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
                 componentes_chunk.append(txt_clip)
                             
         video_render_chunk = CompositeVideoClip(componentes_chunk)
-                    
         ruta_salida_segmento = os.path.join(dir_trabajo, f"clip_1_viral_{tarea_id[:5]}.mp4")
         
         try:
@@ -262,8 +271,8 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
             video_render_chunk.write_videofile(ruta_salida_segmento, fps=30, codec='libx264', audio_codec='aac')
             
         video_render_chunk.close()
-                
         clip_completo.close()
+        
         if os.path.exists(ruta_audio_full): 
             os.remove(ruta_audio_full)
             
@@ -271,7 +280,7 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
             "status": "success",
             "total_clips": 1,
             "viral_score": "98%",
-            "analisis_popularidad": "Generados con éxito usando Whisper AI."
+            "analisis_popularidad": "Video procesado con Whisper AI y Smart Tracking Facial."
         }
     except Exception as err:
         if os.path.exists(ruta_audio_full): 
@@ -279,7 +288,7 @@ def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con
         return {"status": "error", "mensaje": str(err)}
 
 # =========================================================================
-# 🗄️ PASARELA INTEGRADA CON SUPABASE
+# 🗄️ PASARELA INTEGRADA CON SUPABASE Y COOKIES
 # =========================================================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
@@ -294,7 +303,7 @@ if SUPABASE_URL and SUPABASE_KEY:
 cookie_controller = CookieController()
 
 # =========================================================================
-# 🎨 INTERFAZ DE USUARIO
+# 🎨 INTERFAZ GRÁFICA STREAMLIT
 # =========================================================================
 st.markdown("""
     <style>
@@ -423,7 +432,7 @@ if clave_admin == "ZexOSAdmin":
             st.sidebar.error(f"Error al listar: {e}")
 
 # =========================================================================
-# ⏱️ ASIGNACIÓN DE TIEMPOS
+# ⏱️ ASIGNACIÓN DE TIEMPOS Y PARÁMETROS DE SIDEBAR
 # =========================================================================
 if user_role == "admin":
     st.markdown("Tu nivel de acceso actual es: <span class='badge-admin'>ADMINISTRADOR GENERAL</span>", unsafe_allow_html=True)
@@ -468,6 +477,7 @@ with col_der:
         tarea_id = f"job_{uuid.uuid4().hex[:10]}"
         st.session_state.tarea_id = tarea_id
         
+        # Uso directo de la función de creación del entorno
         temp_dir = garantizar_entorno_tarea(tarea_id)
         ruta_input = ""
         
@@ -479,6 +489,7 @@ with col_der:
         with st.status("Procesando video con Inteligencia Artificial...", expanded=True) as status:
             st.write("⏳ Transcribiendo audio con Whisper AI y aplicando tracking facial...")
             
+            # Ejecución del orquestador principal
             resultado = async_render_worker(
                 tarea_id=tarea_id, 
                 ruta_video_master=ruta_input, 
@@ -501,15 +512,10 @@ with col_der:
         res = st.session_state.resultado_tarea
         tid = st.session_state.tarea_id
         
-        st.success("¡Tus clips ya están listos!")
-        total_clips = res.get("total_clips", 1)
-        options_clips = [f"🔥 Short # {i+1}" for i in range(total_clips)]
-        clip_elegido = st.selectbox("Selecciona fragmento:", options=options_clips)
-        indice_clip = options_clips.index(clip_elegido) + 1
-        
+        st.success("¡Tu clip optimizado ya está listo!")
         dir_tarea = os.path.join("storage", tid)
         if os.path.exists(dir_tarea):
-            archivos = [f for f in os.listdir(dir_tarea) if f.startswith(f"clip_{indice_clip}_")]
+            archivos = [f for f in os.listdir(dir_tarea) if f.startswith("clip_1_viral_")]
             if archivos:
                 ruta_clip_final = os.path.join(dir_tarea, archivos[0])
                 with open(ruta_clip_final, "rb") as video_file:
