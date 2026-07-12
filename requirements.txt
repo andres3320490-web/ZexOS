@@ -9,3 +9,6 @@ numpy
 opencv-python-headless
 streamlit-cookies-controller
 requests
+supabase
+postgrest
+deprecat
