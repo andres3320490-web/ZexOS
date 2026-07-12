@@ -74,13 +74,12 @@ with col_der:
                     buffer.write(video_subido.getvalue())
                     
             with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips...", expanded=True) as status:
-                # Ejecución directa integrada al pipeline universal
                 resultado = pipeline_procesamiento_masivo(
                     tarea_id=tarea_id, 
                     ruta_video_master=ruta_input, 
                     formato=formato,
                     con_subtitulos=con_sub, 
-                    color_sub_hex="#deff9a", # Match perfecto con tu branding CSS
+                    color_sub_hex="#deff9a", 
                     estilo_subtitulos=plantilla, 
                     url_remoto=url_remoto,
                     diccionario_manual=diccionario_manual
@@ -100,14 +99,29 @@ with col_der:
         
         st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos con alta probabilidad viral:**")
         
-        # Crear pestañas para cada clip generado automáticamente igual que Opus
-        nombres_pestanas = [f"Clip {i+1} ({c['score']})" for i, c in enumerate(res["clips"])]
+        # --- PROTECCIÓN ANTI-SCALAR ERROR EN EL RENDERIZADO DE PESTAÑAS ---
+        nombres_pestanas = []
+        for i, c in enumerate(res["clips"]):
+            try:
+                # Si el score viene como array/lista de un elemento por error del backend, extrae el escalar
+                score_val = c["score"][0] if hasattr(c["score"], "__len__") and not isinstance(c["score"], (str, bytes)) else c["score"]
+            except Exception:
+                score_val = c["score"]
+            nombres_pestanas.append(f"Clip {i+1} ({score_val})")
+            
         pestanas = st.tabs(nombres_pestanas)
         
         for idx, c in enumerate(res["clips"]):
             with pestanas[idx]:
                 st.markdown("<div class='clip-card'>", unsafe_allow_html=True)
-                st.metric(label="Score de Virabilidad Potencial", value=c["score"])
+                
+                # Control redundante para st.metric para evitar desplomes por culpa de numpy
+                try:
+                    score_final = float(c["score"][0]) if hasattr(c["score"], "__len__") and not isinstance(c["score"], (str, bytes)) else float(c["score"])
+                except Exception:
+                    score_final = c["score"]
+                    
+                st.metric(label="Score de Virabilidad Potencial", value=score_final)
                 
                 st.write("**Reporte de Indexación:**")
                 for r in c["reporte"]:
