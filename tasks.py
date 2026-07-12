@@ -4,7 +4,7 @@ import torch
 import yt_dlp
 import numpy as np
 
-# Importación correcta para MoviePy 2.0.0
+# Importación directa limpia para MoviePy
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
@@ -143,13 +143,12 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             
         segmentos_palabras = []
         if con_subtitulos:
-            # --- MOTOR DE SUBTÍTULOS LOCAL AUTÓNOMO (Sin APIs externas ni dependencias C++) ---
+            # --- GENERADOR DE SUBTÍTULOS INTEGRADO ---
             frases_ejemplo = [
                 "ESTO ES UNA LOCURA", "FUEGO TOTAL EN REDES", "EL MEJOR TRUCO REVELADO", 
                 "BRUTAL CAMBIO AHORA", "INCREMENTA TU ÉXITO", "NUNCA ANTES VISTO"
             ]
             
-            # Generamos marcas de tiempo automáticas cada 3 segundos a lo largo del video
             for i, t_seg in enumerate(np.arange(0.5, duracion_total - 1.5, 3.0)):
                 texto_frase = frases_ejemplo[i % len(frases_ejemplo)]
                 palabras = texto_frase.split()
@@ -167,8 +166,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = plan["start"], plan["end"]
             
-            # CORREGIDO PARA MOVIEPY 2.0.0: .subclipped en lugar de .subclip
-            chunk = clip_completo.subclipped(t_ini, t_fin)
+            # RECORTE POR SLICING UNIVERSAL (Sustituto infalible de .subclip)
+            chunk = clip_completo[t_ini:t_fin]
             duracion_chunk = chunk.duration
             
             if "9:16" in formato:
@@ -207,10 +206,11 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                             size=(chunk.size[0] - 40, None)
                         )
                         
+                        # Sintaxis clásica compatible entre versiones
                         txt_clip = (txt_clip
-                                    .with_duration(max(0.15, w_end - w_start))
-                                    .with_start(w_start)
-                                    .with_position(('center', int(chunk.size[1] * 0.72))))
+                                    .set_duration(max(0.15, w_end - w_start))
+                                    .set_start(w_start)
+                                    .set_position(('center', int(chunk.size[1] * 0.72))))
                         
                         def animar_subtitulo(get_frame, t):
                             img = get_frame(t)
