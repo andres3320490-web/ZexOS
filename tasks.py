@@ -1,14 +1,27 @@
 import os
 import sys
+import subprocess
+
+# --- PARCHE DE COMPATIBILIDAD CRÍTICO PARA INFRAESTRUCTURAS MODERNAS ---
+# Obligamos a registrar setuptools en memoria antes de cualquier importación multimedia
+try:
+    import pkg_resources
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "setuptools"])
+
 import requests
 import cv2
 import torch
 import yt_dlp
 import numpy as np
 import whisper
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, ColorClip
 
-# --- DETECCIÓN DE ENTORNO FFMPEG ---
+# --- IMPORTACIÓN MODULAR ULTRA-ESTABLE (EVITA LOS ERRORES DE MOVIEPY.EDITOR) ---
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.VideoClip import TextClip, ColorClip
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+
+# --- DETECCIÓN Y AJUSTE FORZADO DE ENTORNO FFMPEG ---
 def forzar_instalacion_ffmpeg():
     try:
         import imageio_ffmpeg
@@ -79,6 +92,11 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
         ruta_video_master = descargar_video_remoto(url_remoto, dir_t)
     
     font_p = garantizar_fuente_fisica()
+    
+    # --- PROCESO SEGURO DE APERTURA DE ARCHIVO MEDIOS ---
+    if not os.path.exists(ruta_video_master):
+        return {"status": "error", "mensaje": "El archivo de video maestro no fue localizado en el disco virtual."}
+        
     master = VideoFileClip(ruta_video_master)
     palabras = transcribir_video_por_palabras(ruta_video_master) if con_subtitulos else []
     planes = mapear_mejores_clips(palabras, master.duration)
@@ -98,7 +116,7 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
         def procesar_cuadro_avanzado(get_frame, t):
             frame = get_frame(t)
             
-            # Algoritmo Anti-Trabado por Flujo Óptico
+            # Algoritmo Anti-Trabado Avanzado
             gray_actual = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if cache_video["ultimo_frame"] is not None and cache_video["prev_gray"] is not None:
                 diff = cv2.absdiff(gray_actual, cache_video["prev_gray"])
@@ -133,7 +151,7 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
             
         prog_bar = ColorClip(size=(chunk.size[0], 6), col=(0,0,0)).fl(make_bar, keep_duration=True).set_duration(chunk.duration).set_position(('left', 'bottom'))
 
-        # 3. CAPA DE SUBTÍTULOS
+        # 3. CAPA DE SUBTÍTULOS RESALTADOS
         comps = [chunk, prog_bar]
         if con_subtitulos:
             for word in [w for w in palabras if t_ini <= w['start'] < t_fin]:
