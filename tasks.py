@@ -1,30 +1,45 @@
 import os
 import sys
+import subprocess
+
+# ==============================================================================
+# 🚀 PARCHE ULTRA-COMPATIBLE: Auto-descarga de FFmpeg Estático Local
+# ==============================================================================
+def garantizar_ffmpeg_estatico():
+    """Descarga y configura un binario estático de FFmpeg si el sistema no tiene uno."""
+    try:
+        import imageio_ffmpeg
+        ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
+        os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
+        return ruta_binario
+    except ImportError:
+        print("Instalando imageio-ffmpeg dinámicamente...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "imageio-ffmpeg"])
+        import imageio_ffmpeg
+        ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
+        os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
+        return ruta_binario
+
+# Ejecutar el parche antes de cualquier importación de MoviePy
+ruta_ffmpeg_activa = garantizar_ffmpeg_estatico()
+
+# Forzar rutas en el sistema operativo para que OpenCV y Whisper también lo encuentren
+os.environ["PATH"] += os.pathsep + os.path.dirname(ruta_ffmpeg_activa)
+
+try:
+    from moviepy.config import change_settings
+    change_settings({"FFMPEG_BINARY": ruta_ffmpeg_activa})
+except Exception as e:
+    print(f"Advertencia al mapear configuración interna de MoviePy: {e}")
+
+# Ahora sí, importaciones seguras de dependencias masivas
 import cv2
 import torch
 import yt_dlp
 import requests
 import numpy as np
 import whisper
-
-# ==============================================================================
-# 🛠️ PARCHE INTEGRAL DEFINITIVO: Configuración Forzada de FFmpeg en MoviePy 2.0
-# ==============================================================================
-try:
-    import imageio_ffmpeg
-    ruta_ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-    os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_ffmpeg
-    
-    # Forzar directamente la configuración interna de MoviePy 2.0
-    from moviepy.config import change_settings
-    change_settings({"FFMPEG_BINARY": ruta_ffmpeg})
-except Exception as e:
-    print(f"Advertencia al configurar FFmpeg: {e}")
-
-# Importación directa y segura para MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
-
-DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Diccionario inteligente para la inyección automática de Emojis de Retención
 EMOJI_DICTIONARY = {
