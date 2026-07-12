@@ -2,7 +2,7 @@ import subprocess
 import sys
 import os
 
-# --- PARCHE INTERNO CONTRA ERRORES (Invisible en la página) ---
+# --- PARCHE DE COMPILACIÓN OBLIGATORIO ---
 try:
     from PIL import Image
 except ImportError:
@@ -11,28 +11,23 @@ except ImportError:
 import streamlit as st
 import uuid
 
-# Asegurar rutas locales del servidor
+# Asegurar la importación del módulo local tasks.py
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from tasks import pipeline_procesamiento_masivo
 
-from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
+# --- INTERFAZ BASE ---
+st.title("Opus Clip Clone")
 
-# --- TU CONFIGURACIÓN Y ESTILO ORIGINAL ---
-st.set_page_config(page_title="Opus Clip Clone", page_icon="✂️", layout="centered")
-
-st.title("✂️ Opus Clip Clone")
-st.markdown("### Genera tus clips virales en segundos")
-
-# Estructura e inputs tal cual los tenías
-url_video = st.text_input("Introduce la URL del video largo:")
-formato = st.selectbox("Formato de salida:", ["9:16", "1:1"])
-con_subtitulos = st.checkbox("¿Incluir subtítulos?", value=True)
-color_sub_hex = st.color_picker("Color de los subtítulos destacados:", "#deff9a")
+url_video = st.text_input("URL del video:")
+formato = st.selectbox("Formato:", ["9:16", "1:1"])
+con_subtitulos = st.checkbox("Subtítulos", value=True)
+color_sub_hex = st.color_picker("Color de subtítulos:", "#deff9a")
 estilo_subtitulos = st.selectbox("Estilo:", ["hormozi", "estandar"])
-diccionario_manual = st.text_input("Ganchos o palabras clave adicionales (opcional):")
+diccionario_manual = st.text_input("Palabras clave adicionales:")
 
-if st.button("Procesar Video"):
+if st.button("Procesar"):
     if url_video:
-        tarea_id = str(uuid.uuid4())
+        tarea_id = str(uuid.uuid4())[:8]
         
         with st.spinner("Procesando..."):
             resultado = pipeline_procesamiento_masivo(
@@ -47,11 +42,9 @@ if st.button("Procesar Video"):
             )
             
         if resultado["status"] == "success":
-            st.success("¡Completado con éxito!")
+            st.success("¡Completado!")
             for clip in resultado["clips"]:
-                st.write(f"**Clip:** {clip['archivo']} - **Score:** {clip['score']}")
-                for rep in clip["reporte"]:
-                    st.write(f"- {rep}")
+                st.write(f"**Clip:** {clip['archivo']} | **Score:** {clip['score']}")
                 
                 ruta_clip = os.path.join("storage", tarea_id, clip["archivo"])
                 if os.path.exists(ruta_clip):
@@ -61,4 +54,4 @@ if st.button("Procesar Video"):
         else:
             st.error(f"Error: {resultado['mensaje']}")
     else:
-        st.warning("Por favor introduce una URL.")
+        st.warning("Introduce una URL.")
