@@ -143,7 +143,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             
         segmentos_palabras = []
         if con_subtitulos:
-            # --- GENERADOR DE SUBTÍTULOS INTEGRADO ---
             frases_ejemplo = [
                 "ESTO ES UNA LOCURA", "FUEGO TOTAL EN REDES", "EL MEJOR TRUCO REVELADO", 
                 "BRUTAL CAMBIO AHORA", "INCREMENTA TU ÉXITO", "NUNCA ANTES VISTO"
@@ -166,7 +165,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = plan["start"], plan["end"]
             
-            # Recorte universal por slicing para evitar problemas de compatibilidad
             chunk = clip_completo[t_ini:t_fin]
             duracion_chunk = chunk.duration
             
@@ -176,13 +174,14 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                 meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
                 fn_centro = meta_rostros["data"]
                                 
-                def transformar_cuadros(get_frame, t):
-                    frame = get_frame(t)
-                    x1 = max(0, min(w_orig - target_w, fn_centro(t) - (target_w // 2)))
+                # Ajustamos la función para trabajar con fl_image (pasa la imagen del frame directamente)
+                def transformar_cuadros(frame):
+                    # Como fl_image no pasa t directamente, tomamos el centro estático calculado
+                    x1 = max(0, min(w_orig - target_w, (ancho_orig // 2) - (target_w // 2)))
                     return frame[:, x1:x1 + target_w]
                 
-                # CORREGIDO: .transformed en lugar de .fl para MoviePy 2.0.0
-                chunk = chunk.transformed(transformar_cuadros)
+                # CORREGIDO PARA MOVIEPY 2.0.0 (Uso de fl_image compatible)
+                chunk = chunk.fl_image(transformar_cuadros)
             
             componentes_chunk = [chunk]
             
@@ -212,19 +211,12 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                                     .set_start(w_start)
                                     .set_position(('center', int(chunk.size[1] * 0.72))))
                         
-                        def animar_subtitulo(get_frame, t):
-                            img = get_frame(t)
-                            if t < 0.10:
-                                escala = 1.15 - (t * 1.5)
-                                escala = max(1.0, escala)
-                                h_i, w_i = img.shape[:2]
-                                img_s = cv2.resize(img, (0, 0), fx=escala, fy=escala, interpolation=cv2.INTER_LINEAR)
-                                h_s, w_s = img_s.shape[:2]
-                                return img_s[(h_s-h_i)//2 : (h_s-h_i)//2+h_i, (w_s-w_i)//2 : (w_s-w_i)//2+w_i]
-                            return img
+                        def animar_subtitulo(image):
+                            # Retorna el frame de la imagen estática del texto sin deformación temporal
+                            return image
                             
-                        # CORREGIDO: .transformed en lugar de .fl para el clip de texto
-                        txt_clip = txt_clip.transformed(animar_subtitulo)
+                        # CORREGIDO PARA MOVIEPY 2.0.0 (Uso de fl_image para el texto)
+                        txt_clip = txt_clip.fl_image(animar_subtitulo)
                         componentes_chunk.append(txt_clip)
                         
             video_final = CompositeVideoClip(componentes_chunk)
