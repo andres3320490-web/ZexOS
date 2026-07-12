@@ -1,3 +1,4 @@
+--only-binary=:all:
 streamlit
 fastapi
 uvicorn
@@ -7,7 +8,7 @@ streamlit-cookies-controller
 numpy
 opencv-python-headless
 yt-dlp
-pillow>=10.0.0
+pillow
 openai-whisper
 moviepy==2.0.0
 torch
