@@ -1,12 +1,10 @@
 import os
 import uuid
-import datetime
-import numpy as np
 import streamlit as st
 from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
 
-# IMPORTACIÓN DIRECTA DE LAS FUNCIONES DESDE TASKS.PY
+# Importación del backend modularizado
 from tasks import garantizar_entorno_tarea, async_render_worker
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -26,22 +24,23 @@ st.markdown("""
     .stApp { background-color: #07090e; color: #E2E8F0; }
     h1, h2, h3, .stMarkdown strong { color: #deff9a !important; font-family: 'Inter', sans-serif; }
     .stButton>button { width: 100%; background: #deff9a !important; color: #07090e !important; font-weight: bold !important; border-radius: 8px !important; }
+    .report-box { background-color: #111827; padding: 15px; border-radius: 8px; border-left: 4px solid #deff9a; margin-top: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ ZexOS AI Studio Premium")
+st.title("⚡ ZexOS AI Studio Pro (Clon 110% Opus)")
 
 saved_email = cookie_controller.get("zexos_user_email")
 email_usuario = st.text_input("Correo electrónico corporativo:", value=saved_email if saved_email else "", placeholder="ejemplo@correo.com").strip()
 
 if not email_usuario:
-    st.info("💡 Introduce tu correo para desplegar tu espacio de trabajo.")
+    st.info("💡 Introduce tu correo para desplegar tu espacio de trabajo corporativo.")
     st.stop()
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-# Sidebar y Parámetros
-st.sidebar.subheader("🔒 Configuración ZexOS")
+# Parámetros avanzados del Sidebar
+st.sidebar.subheader("🔒 Configuración del Short")
 formato_seleccionado = st.sidebar.selectbox("Relación de Aspecto Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Subtítulos Dinámicos Inteligentes", value=True)
 stilo_elegido = st.sidebar.selectbox("Plantilla Tipográfica", options=["hormozi", "classic_three"])
@@ -56,13 +55,12 @@ with col_izq:
     boton_procesar = st.button("🚀 GENERAR SHORT ULTRA-VIRAL")
 
 with col_der:
-    st.subheader("📊 Consola de Resultados")
+    st.subheader("📊 Consola de Resultados Inteligente")
     
     if boton_procesar:
         tarea_id = f"job_{uuid.uuid4().hex[:10]}"
         st.session_state.tarea_id = tarea_id
         
-        # Uso de la función importada para configurar carpetas corporativas
         temp_dir = garantizar_entorno_tarea(tarea_id)
         ruta_input = ""
         
@@ -71,8 +69,7 @@ with col_der:
             with open(ruta_input, "wb") as buffer:
                 buffer.write(video_subido.getvalue())
         
-        with st.status("Procesando con el motor externo de IA...", expanded=True) as status:
-            # Llamado directo al trabajador asíncrono importado
+        with st.status("Ejecutando análisis semántico y tracking cinemático...", expanded=True) as status:
             resultado = async_render_worker(
                 tarea_id=tarea_id, 
                 ruta_video_master=ruta_input, 
@@ -85,7 +82,7 @@ with col_der:
             )
             
             if resultado.get("status") == "success":
-                status.update(label="⚡ ¡Corto Optimizado con Éxito!", state="complete", expanded=False)
+                status.update(label="⚡ ¡Corto Optimizado y Evaluado con Éxito!", state="complete", expanded=False)
                 st.session_state.resultado_tarea = resultado
             else:
                 status.update(label="❌ Fallo en procesamiento", state="error")
@@ -95,7 +92,14 @@ with col_der:
         res = st.session_state.resultado_tarea
         tid = st.session_state.tarea_id
         
-        st.metric(label="Score de Virabilidad Predictivo", value=res.get("viral_score"))
+        # 🧠 EXCLUSIVO 110%: Despliegue de métricas reales calculadas por el backend matemático
+        st.metric(label="Score de Virabilidad Basado en NLP", value=res.get("viral_score"))
+        
+        st.markdown("<div class='report-box'><strong>📋 Reporte de Retención de Audiencia:</strong>", unsafe_allow_html=True)
+        for frase in res.get("analisis_popularidad", []):
+            st.markdown(f"- {frase}")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.write("")
         
         dir_tarea = os.path.join("storage", tid)
         if os.path.exists(dir_tarea):
