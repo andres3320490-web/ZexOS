@@ -7,6 +7,7 @@ import numpy as np
 
 # Importación directa para MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
+from PIL import ImageFont
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -19,28 +20,38 @@ EMOJI_DICTIONARY = {
 
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
 
-def obtener_ruta_fuente_real() -> str:
-    """Descarga una fuente física TTF real y devuelve su ruta absoluta para Pillow/MoviePy."""
+def obtener_fuente_segura():
+    """
+    Intenta descargar una fuente válida. Si falla o está corrupta,
+    devuelve el objeto por defecto de Pillow para evitar caídas del sistema.
+    """
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
-    ruta_archivo_fuente = os.path.join(directorio_storage, "Roboto-Bold.ttf")
+    ruta_fuente = os.path.join(directorio_storage, "font_sub.ttf")
     
-    # Si el archivo existe pero mide menos de 10KB, está corrupto y se borra
-    if os.path.exists(ruta_archivo_fuente) and os.path.getsize(ruta_archivo_fuente) < 10000:
-        os.remove(ruta_archivo_fuente)
+    # URL alternativa ultra-estable de un CDN de fuentes para evitar bloques de GitHub
+    url_fuente = "https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto-Bold.ttf"
     
-    if not os.path.exists(ruta_archivo_fuente):
-        # URL directa y oficial del repositorio de Google Fonts (sin intermediarios de CDN)
-        url_fuente = "https://github.com/google/fonts/raw/main/apache/roboto/static/Roboto-Bold.ttf"
+    if not os.path.exists(ruta_fuente) or os.path.getsize(ruta_fuente) < 10000:
         try:
-            respuesta = requests.get(url_fuente, timeout=15)
+            respuesta = requests.get(url_fuente, timeout=10, allow_redirects=True)
             if respuesta.status_code == 200 and len(respuesta.content) > 10000:
-                with open(ruta_archivo_fuente, "wb") as archivo:
+                with open(ruta_fuente, "wb") as archivo:
                     archivo.write(respuesta.content)
         except Exception:
-            pass
-            
-    return ruta_archivo_fuente if os.path.exists(ruta_archivo_fuente) else ""
+            if os.path.exists(ruta_fuente):
+                os.remove(ruta_fuente)
+
+    # Validación final del formato por parte de Pillow antes de pasarla a MoviePy
+    if os.path.exists(ruta_fuente):
+        try:
+            ImageFont.truetype(ruta_fuente, 20)
+            return ruta_fuente  # Retorna el string de la ruta si es válido
+        except Exception:
+            if os.path.exists(ruta_fuente):
+                os.remove(ruta_fuente)
+                
+    return ImageFont.load_default()  # Sistema de respaldo nativo de Pillow
 
 def garantizar_entorno_tarea(tarea_id: str) -> str:
     ruta_tarea = os.path.join("storage", tarea_id)
@@ -154,8 +165,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_procesados = []
     
-    # Resolver la ruta limpia del archivo de fuente
-    ruta_fuente_validada = obtener_ruta_fuente_real()
+    # Obtener el recurso de fuente validado a prueba de fallas
+    objeto_fuente = obtener_fuente_segura()
         
     try:
         if url_remoto and url_remoto.strip() != "":
@@ -220,11 +231,12 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
+                        # CORREGIDO: Se pasa directamente el objeto o ruta verificado sin romper Pillow
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
-                            font=ruta_fuente_validada,
+                            font=objeto_fuente,
                             size=(chunk.size[0] - 40, None)
                         )
                         
