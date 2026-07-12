@@ -21,7 +21,7 @@ PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "
 
 def garantizar_fuente_local() -> str:
     """Descarga una fuente TTF estándar si no existe localmente para evitar fallos de Pillow."""
-    ruta_fuente = os.path.join("storage", "Roboto-Bold.ttf")
+    ruta_fuente = os.path.abspath(os.path.join("storage", "Roboto-Bold.ttf"))
     os.makedirs("storage", exist_ok=True)
     if not os.path.exists(ruta_fuente):
         url_fuente = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
@@ -33,7 +33,7 @@ def garantizar_fuente_local() -> str:
                 return ruta_fuente
         except Exception:
             pass
-    return ruta_fuente if os.path.exists(ruta_fuente) else "Arial"
+    return ruta_fuente if os.path.exists(ruta_fuente) else ""
 
 def garantizar_entorno_tarea(tarea_id: str) -> str:
     ruta_tarea = os.path.join("storage", tarea_id)
@@ -147,7 +147,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_procesados = []
     
-    # Garantizar la existencia de la fuente local válida
+    # Obtener ruta absoluta verificada del archivo .ttf descargado
     fuente_segura = garantizar_fuente_local()
         
     try:
@@ -213,12 +213,15 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # CORREGIDO: Ahora usa la ruta física absoluta de la fuente Roboto descargada
+                        # CORREGIDO PARA MOVIEPY 2.0 + PILLOW: Si no se encuentra archivo local, se pasa None 
+                        # para que use la fuente interna por defecto del renderizador sin arrojar error crítico.
+                        fuente_param = fuente_segura if (fuente_segura and os.path.exists(fuente_segura)) else None
+                        
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
-                            font=fuente_segura,
+                            font=fuente_param,
                             size=(chunk.size[0] - 40, None)
                         )
                         
