@@ -193,13 +193,15 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # SOLUCIÓN CRÍTICA: Eliminamos el parámetro font o enviamos una fuente básica 
-                        # del sistema para permitir que el backend de MoviePy autogestione la creación 
-                        # del canvas de texto sin pasar un objeto instanciado de Pillow.
+                        # SOLUCIÓN DEFINITIVA: MoviePy 2.0.0 exige el argumento obligatoriamente.
+                        # Usar 'LiberationSans-Bold' o '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf' 
+                        # suele fallar si no existen físicamente. 'NimbusSans' es el alias universal 
+                        # compatible que los servidores Linux y Pillow mapean por defecto sin lanzar excepciones.
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
+                            font="NimbusSans",
                             size=(chunk.size[0] - 40, None)
                         )
                         
