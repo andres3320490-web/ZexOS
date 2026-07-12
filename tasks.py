@@ -55,9 +55,9 @@ EMOJI_DICTIONARY = {
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "hoy", "increíble", "revelado", "atención", "importante"}
 
 def garantizar_fuente_fisica() -> str:
-    directorio_storage = os.path.abspath("storage")
-    os.makedirs(directorio_storage, exist_ok=True)
-    ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
+    directory_storage = os.path.abspath("storage")
+    os.makedirs(directory_storage, exist_ok=True)
+    ruta_fuente = os.path.join(directory_storage, "fuente_subtitulos.ttf")
     
     if os.path.exists(ruta_fuente) and os.path.getsize(ruta_fuente) > 10000:
         return ruta_fuente
@@ -138,13 +138,13 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
             segmentos_palabras.append({
                 "start": float(w["start"]),
                 "end": float(w["end"]),
-                "text": w["word"].strip()
+                "text": str(w["word"]).strip()
             })
     return segmentos_palabras
 
 def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
     cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    fps = float(cap.get(cv2.CAP_PROP_FPS)) or 30.0
     cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
     
     ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
@@ -162,7 +162,8 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
                 
                 sobely = cv2.Sobel(reducido, cv2.CV_64F, 0, 1, ksize=5)
                 abs_sobely = np.absolute(sobely)
-                scaled_sobel = np.uint8(255 * (abs_sobely / np.max(abs_sobely))) if np.max(abs_sobely) > 0 else reducido
+                max_sobel = np.max(abs_sobely)
+                scaled_sobel = np.uint8(255 * (abs_sobely / max_sobel)) if max_sobel > 0 else reducido
                 
                 column_sums = np.sum(scaled_sobel, axis=0)
                 centro_estimado = int(np.argmax(column_sums) * 4)
@@ -189,22 +190,27 @@ def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: flo
         distancia = pos_detectada - pos_actual
         factor_inercia = 0.50 if abs(distancia) > (ancho_orig // 4) else 0.12
         pos_actual += int(distancia * factor_inercia)
-        suavizados.append(pos_actual)
+        suavizados.append(int(pos_actual))
             
     return {"coordenadas": suavizados, "fps": fps}
 
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
     if duracion_total < 25.0 or not segmentos_palabras:
-        return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración del video."]}]
+        return [{"start": 0.0, "end": float(duracion_total), "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración del video."]}]
     
     ventanas = []
     paso_tiempo = 10.0 
     
-    for inicio_bloque in np.arange(0, duracion_total - 15.0, paso_tiempo):
-        fin_bloque = min(duracion_total, inicio_bloque + 30.0)
+    # --- PARCHE DE ESCALARES NATIVOS ---
+    # Usamos bucles estándar de Python en lugar de np.arange para evitar heredar numpy.float64
+    inicio_bloque = 0.0
+    while inicio_bloque < (duracion_total - 15.0):
+        fin_bloque = min(float(duracion_total), inicio_bloque + 30.0)
         palabras_bloque = [w for w in segmentos_palabras if inicio_bloque <= w["start"] <= fin_bloque]
         
-        if len(palabras_bloque) < 5: continue
+        if len(palabras_bloque) < 5:
+            inicio_bloque += paso_tiempo
+            continue
             
         palabras_clave = 0
         ganchos = []
@@ -214,7 +220,9 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
                 palabras_clave += 1
                 if p_limpia not in ganchos: ganchos.append(p_limpia)
                 
-        wpm = (len(palabras_bloque) / (palabras_bloque[-1]["end"] - palabras_bloque[0]["start"])) * 60 if len(palabras_bloque) > 1 else 140
+        duracion_real_bloque = palabras_bloque[-1]["end"] - palabras_bloque[0]["start"]
+        wpm = (len(palabras_bloque) / duracion_real_bloque) * 60 if duracion_real_bloque > 0.1 else 140
+        
         score = 65 + min(20, palabras_clave * 5) + (13 if 130 <= wpm <= 170 else 5)
         score = min(99, int(score))
         
@@ -224,11 +232,12 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
         ]
         
         ventanas.append({
-            "start": palabras_bloque[0]["start"],
-            "end": palabras_bloque[-1]["end"],
-            "score": score,
+            "start": float(palabras_bloque[0]["start"]),
+            "end": float(palabras_bloque[-1]["end"]),
+            "score": int(score),
             "reasons": reasons
         })
+        inicio_bloque += paso_tiempo
         
     ventanas = sorted(ventanas, key=lambda x: x["score"], reverse=True)
     clips_filtrados = []
@@ -242,7 +251,7 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
             clips_filtrados.append(v)
             if len(clips_filtrados) >= max_clips: break
             
-    return clips_filtrados if clips_filtrados else [{"start": 0.0, "end": duracion_total, "score": 85, "reasons": ["Segmento óptimo adaptado."]}]
+    return clips_filtrados if clips_filtrados else [{"start": 0.0, "end": float(duracion_total), "score": 85, "reasons": ["Segmento óptimo adaptado."]}]
 
 def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_palabras=3):
     palabras_filtradas = [w for w in segmentos_palabras if t_ini <= w["start"] < t_fin]
@@ -252,9 +261,9 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
         grupo = palabras_filtradas[i:i + max_palabras]
         if not grupo: continue
         bloques.append({
-            "start": grupo[0]["start"],
-            "end": grupo[-1]["end"],
-            "palabras": grupo  # <--- Corregido: antes decía 'group'
+            "start": float(grupo[0]["start"]),
+            "end": float(grupo[-1]["end"]),
+            "palabras": grupo  
         })
     return bloques
 
@@ -272,7 +281,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             PALABRAS_RETENCION.update(nuevos_ganchos)
                     
         clip_completo = VideoFileClip(ruta_video_master)
-        duracion_total = clip_completo.duration
+        duracion_total = float(clip_completo.duration)
             
         segmentos_palabras = []
         if con_subtitulos:
@@ -281,10 +290,10 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         planes_de_corte = mapear_mejores_clips(segmentos_palabras, duracion_total)
         
         for idx, plan in enumerate(planes_de_corte):
-            t_ini, t_fin = plan["start"], plan["end"]
+            t_ini, t_fin = float(plan["start"]), float(plan["end"])
             
-            chunk = clip_completo[t_ini:t_fin]
-            duracion_chunk = chunk.duration
+            chunk = clip_completo.subclip(t_ini, t_fin)
+            duracion_chunk = float(chunk.duration)
             
             if "9:16" in formato or "Short" in formato:
                 tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
@@ -308,8 +317,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                 bloques_texto = construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin)
                 
                 for bloque in bloques_texto:
-                    b_start = bloque["start"] - t_ini
-                    b_end = bloque["end"] - t_ini
+                    b_start = float(bloque["start"] - t_ini)
+                    b_end = float(bloque["end"] - t_ini)
                     
                     techo_maximo = duracion_chunk - 0.02
                     if b_start >= techo_maximo: continue
@@ -320,14 +329,14 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                     
                     palabras_texto = []
                     for w in bloque["palabras"]:
-                        word_raw = w["text"].strip()
+                        word_raw = str(w["text"]).strip()
                         palabra_limpia = word_raw.lower().strip(".,¡!¿?")
                         emoji = EMOJI_DICTIONARY.get(palabra_limpia, "")
                         palabras_texto.append(f"{emoji} {word_raw}" if emoji else word_raw)
                         
                     texto_completo_bloque = " ".join(palabras_texto).upper()
                     
-                    contiene_gancho = any(w["text"].lower().strip(".,¡!¿?") in PALABRAS_RETENCION for w in bloque["palabras"])
+                    contiene_gancho = any(str(w["text"]).lower().strip(".,¡!¿?") in PALABRAS_RETENCION for w in bloque["palabras"])
                     color_bloque = color_sub_hex if contiene_gancho else "#FFFFFF"
                     
                     txt_clip = TextClip(
@@ -352,9 +361,10 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             video_final.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
             video_final.close()
             
+            # Forzamos la puntuación a un entero limpio de Python para evitar el error de escalar en st.tabs / st.metric
             clips_processed.append({
                 "archivo": nombre_archivo,
-                "score": f"{plan['score']}%",
+                "score": int(plan["score"]),
                 "reporte": plan["reasons"]
             })
             
