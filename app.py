@@ -99,16 +99,28 @@ with col_izq:
 
 with col_der:
     st.subheader("📊 Centro de Control de Curación Coherente")
-        if ejecutar:
+    
+    if ejecutar:
         if not url_remoto.strip() and not video_subido:
             st.error("❌ Por favor, proporciona una URL de video o arrastra un archivo local.")
         else:
-            limite_bytes = (4 if es_vip else 2) * 1024 * 1024 * 1024
+            # --- CONFIGURACIÓN DE LÍMITES DE SUBIDA SEGÚN RANGO ---
+            ADMIN_EMAILS = ["andres3320490@gmail.com"]
+            
+            if email_usuario in ADMIN_EMAILS:
+                limite_gb = 6
+            elif es_vip:
+                limite_gb = 4
+            else:
+                limite_gb = 2
+                
+            limite_bytes = limite_gb * 1024 * 1024 * 1024
+            
             if video_subido and video_subido.size > limite_bytes:
-                st.error(f"❌ El archivo excede el límite permitido para tu plan ({4 if es_vip else 2} GB).")
+                st.error(f"❌ El archivo excede el límite permitido para tu plan ({limite_gb} GB).")
                 st.stop()
                 
-            if not es_vip and minutos_consumidos >= 120:
+            if not es_vip and email_usuario not in ADMIN_EMAILS and minutos_consumidos >= 120:
                 st.error("❌ Has agotado tus 120 minutos gratuitos.")
                 st.stop()
 
@@ -138,7 +150,7 @@ with col_der:
                 if resultado.get("status") == "success":
                     status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
                     st.session_state.resultado_lote = resultado
-                    if not es_vip:
+                    if not es_vip and email_usuario not in ADMIN_EMAILS:
                         st.session_state.minutos_usados += 5
                 else:
                     status.update(label="❌ Error crítico en el pipeline", state="error")
