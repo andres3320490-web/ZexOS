@@ -3,7 +3,6 @@ import sys
 import subprocess
 
 # --- PARCHE DE COMPATIBILIDAD CRÍTICO PARA INFRAESTRUCTURAS MODERNAS ---
-# Obligamos a registrar setuptools en memoria antes de cualquier importación multimedia
 try:
     import pkg_resources
 except ImportError:
@@ -16,26 +15,20 @@ import yt_dlp
 import numpy as np
 import whisper
 
-# --- IMPORTACIÓN MODULAR ULTRA-ESTABLE (EVITA LOS ERRORES DE MOVIEPY.EDITOR) ---
+# Importaciones directas para evitar el cuello de botella de moviepy.editor
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.VideoClip import TextClip, ColorClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 
-# --- DETECCIÓN Y AJUSTE FORZADO DE ENTORNO FFMPEG ---
-def forzar_instalacion_ffmpeg():
-    try:
-        import imageio_ffmpeg
-        ruta = imageio_ffmpeg.get_ffmpeg_exe()
-        os.environ["IMAGEIO_FFMPEG_EXE"] = ruta
-        return ruta
-    except:
-        return "ffmpeg"
-
-ruta_ffmpeg = forzar_instalacion_ffmpeg()
+# Ajuste manual para que moviepy localice ffmpeg sin depender de módulos rotos
+try:
+    import imageio_ffmpeg
+    os.environ["IMAGEIO_FFMPEG_EXE"] = imageio_ffmpeg.get_ffmpeg_exe()
+except:
+    pass
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 EMOJI_DICTIONARY = {"dinero": "💰", "fuego": "🔥", "viral": "🔥", "éxito": "🚀", "brutal": "🤯", "error": "❌"}
-PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"increíble", "secreto", "atención"}
 
 def garantizar_fuente_fisica():
     os.makedirs("storage", exist_ok=True)
@@ -93,9 +86,8 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
     
     font_p = garantizar_fuente_fisica()
     
-    # --- PROCESO SEGURO DE APERTURA DE ARCHIVO MEDIOS ---
     if not os.path.exists(ruta_video_master):
-        return {"status": "error", "mensaje": "El archivo de video maestro no fue localizado en el disco virtual."}
+        return {"status": "error", "mensaje": "El archivo de video maestro no fue localizado."}
         
     master = VideoFileClip(ruta_video_master)
     palabras = transcribir_video_por_palabras(ruta_video_master) if con_subtitulos else []
@@ -106,7 +98,7 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
         t_ini, t_fin = p['start'], p['end']
         chunk = master.subclip(t_ini, t_fin)
         
-        # 1. AUTO-REENCUADRE (9:16) & REPARACIÓN DE TIRONES
+        # 1. AUTO-REENCUADRE & INTERPOLACIÓN ANTI-TIRONES
         tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
         w, h = chunk.size
         tw = int(h * (9/16)) if "9:16" in formato else w
@@ -115,9 +107,8 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
 
         def procesar_cuadro_avanzado(get_frame, t):
             frame = get_frame(t)
-            
-            # Algoritmo Anti-Trabado Avanzado
             gray_actual = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
             if cache_video["ultimo_frame"] is not None and cache_video["prev_gray"] is not None:
                 diff = cv2.absdiff(gray_actual, cache_video["prev_gray"])
                 if np.mean(diff) < 1.0 and t > cache_video["ultimo_t"]:
@@ -151,7 +142,7 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
             
         prog_bar = ColorClip(size=(chunk.size[0], 6), col=(0,0,0)).fl(make_bar, keep_duration=True).set_duration(chunk.duration).set_position(('left', 'bottom'))
 
-        # 3. CAPA DE SUBTÍTULOS RESALTADOS
+        # 3. CAPA DE SUBTÍTULOS
         comps = [chunk, prog_bar]
         if con_subtitulos:
             for word in [w for w in palabras if t_ini <= w['start'] < t_fin]:
