@@ -10,3 +10,4 @@ yt-dlp
 opencv-python-headless
 requests
 numpy<2.0.0
+streamlit
