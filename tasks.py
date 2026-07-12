@@ -20,30 +20,23 @@ EMOJI_DICTIONARY = {
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
 
 def garantizar_fuente_fisica() -> str:
-    """
-    Descarga una fuente TTF real directamente desde los servidores de Google Fonts
-    y devuelve la ruta absoluta del archivo para asegurar que Pillow pueda abrirlo.
-    """
+    """Descarga una fuente TTF real y devuelve la ruta absoluta del archivo."""
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
     ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
     
-    # Si el archivo ya existe y es válido (no está vacío), lo usamos directamente
     if os.path.exists(ruta_fuente) and os.path.getsize(ruta_fuente) > 10000:
         return ruta_fuente
 
-    # URL de descarga directa del binario TTF original de Google Fonts
     url_fuente = "https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf"
-    
     try:
-        # Forzamos la descarga del flujo binario nativo
         respuesta = requests.get(url_fuente, timeout=15, stream=True)
         if respuesta.status_code == 200:
             with open(ruta_fuente, "wb") as archivo:
                 for chunk in respuesta.iter_content(chunk_size=8192):
                     archivo.write(chunk)
-    except Exception as e:
-        print(f"[Error de Descarga] No se pudo obtener la fuente remota: {e}")
+    except Exception:
+        pass
         
     return ruta_fuente
 
@@ -157,9 +150,7 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
 
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
-    clips_procesados = []
-    
-    # Aseguramos la existencia del archivo físico .ttf local
+    clips_processed = []
     ruta_fuente_absoluta = garantizar_fuente_fisica()
         
     try:
@@ -225,7 +216,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # PASO CRÍTICO: Se pasa la ruta absoluta del string local .ttf válido
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
@@ -234,10 +224,12 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                             size=(chunk.size[0] - 40, None)
                         )
                         
+                        # CORRECCIÓN AQUÍ: Cambiados .set_duration(), .set_start() y .set_position() 
+                        # por los métodos requeridos en MoviePy 2.0.0: with_duration(), with_start() y with_position()
                         txt_clip = (txt_clip
-                                    .set_duration(max(0.15, w_end - w_start))
-                                    .set_start(w_start)
-                                    .set_position(('center', int(chunk.size[1] * 0.72))))
+                                    .with_duration(max(0.15, w_end - w_start))
+                                    .with_start(w_start)
+                                    .with_position(('center', int(chunk.size[1] * 0.72))))
                         
                         def animar_subtitulo(image):
                             return image
@@ -252,14 +244,14 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             video_final.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
             video_final.close()
             
-            clips_procesados.append({
+            clips_processed.append({
                 "archivo": nombre_archivo,
                 "score": f"{plan['score']}%",
                 "reporte": plan["reasons"]
             })
             
         clip_completo.close()
-        return {"status": "success", "clips": clips_procesados}
+        return {"status": "success", "clips": clips_processed}
         
     except Exception as err:
         return {"status": "error", "mensaje": str(err)}
