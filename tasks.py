@@ -7,24 +7,20 @@ import subprocess
 # ==============================================================================
 def forzar_instalacion_ffmpeg():
     """Garantiza la existencia de FFmpeg descargando un binario estático directo a la app."""
-    # 1. Comprobar si ya está mapeado en el sistema
     rutas_comunes = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
     for ruta in rutas_comunes:
         if os.path.exists(ruta):
             os.environ["IMAGEIO_FFMPEG_EXE"] = ruta
             return ruta
 
-    # 2. Si no existe, forzar la descarga del binario ejecutable mediante imageio-ffmpeg
     try:
         import imageio_ffmpeg
     except ImportError:
-        # Instalar la librería de binarios estáticos si no está presente
         subprocess.check_call([sys.executable, "-m", "pip", "install", "imageio-ffmpeg"])
         import imageio_ffmpeg
     
     ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
     
-    # 3. Inyectar el binario en las variables de entorno globales del sistema
     os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
     dir_binario = os.path.dirname(ruta_binario)
     if dir_binario not in os.environ["PATH"]:
@@ -32,17 +28,14 @@ def forzar_instalacion_ffmpeg():
         
     return ruta_binario
 
-# Ejecutar la inyección del binario antes de que cualquier otra librería intente buscarlo
 ruta_ffmpeg_activa = forzar_instalacion_ffmpeg()
 
-# Configurar MoviePy 2.0.0 para usar el ejecutable descargado
 try:
     from moviepy.config import change_settings
     change_settings({"FFMPEG_BINARY": ruta_ffmpeg_activa})
 except Exception as e:
     print(f"Advertencia al configurar MoviePy de forma interna: {e}")
 
-# Ahora se pueden importar de forma segura las librerías que dependen de FFmpeg
 import cv2
 import torch
 import yt_dlp
@@ -105,7 +98,9 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
     print(f"📦 Cargando modelo Whisper en {DISPOSITIVO}...")
     modelo = whisper.load_model("base", device=DISPOSITIVO)
     print("🎙️ Transcribiendo audio latente palabra por palabra...")
-    resultado = modelo.transcribe(ruta_video, language="es", word_timestamps=True)
+    
+    # MODIFICADO: fp16=False desactiva explícitamente la advertencia en CPU
+    resultado = modelo.transcribe(ruta_video, language="es", word_timestamps=True, fp16=False)
     
     segmentos_palabras = []
     for segmento in resultado.get("segments", []):
