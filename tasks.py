@@ -166,11 +166,11 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = plan["start"], plan["end"]
             
-            # RECORTE POR SLICING UNIVERSAL (Sustituto infalible de .subclip)
+            # Recorte universal por slicing para evitar problemas de compatibilidad
             chunk = clip_completo[t_ini:t_fin]
             duracion_chunk = chunk.duration
             
-            if "9:16" in formato:
+            if "9:16" in formato or "Short" in formato:
                 w_orig, h_orig = chunk.size
                 target_w = int(h_orig * (9 / 16))
                 meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
@@ -181,7 +181,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                     x1 = max(0, min(w_orig - target_w, fn_centro(t) - (target_w // 2)))
                     return frame[:, x1:x1 + target_w]
                 
-                chunk = chunk.fl(transformar_cuadros)
+                # CORREGIDO: .transformed en lugar de .fl para MoviePy 2.0.0
+                chunk = chunk.transformed(transformar_cuadros)
             
             componentes_chunk = [chunk]
             
@@ -206,7 +207,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                             size=(chunk.size[0] - 40, None)
                         )
                         
-                        # Sintaxis clásica compatible entre versiones
                         txt_clip = (txt_clip
                                     .set_duration(max(0.15, w_end - w_start))
                                     .set_start(w_start)
@@ -223,7 +223,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                                 return img_s[(h_s-h_i)//2 : (h_s-h_i)//2+h_i, (w_s-w_i)//2 : (w_s-w_i)//2+w_i]
                             return img
                             
-                        txt_clip = txt_clip.fl(animar_subtitulo)
+                        # CORREGIDO: .transformed en lugar de .fl para el clip de texto
+                        txt_clip = txt_clip.transformed(animar_subtitulo)
                         componentes_chunk.append(txt_clip)
                         
             video_final = CompositeVideoClip(componentes_chunk)
