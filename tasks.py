@@ -1,348 +1,202 @@
-import os
-import sys
 import subprocess
-import requests
-import shutil
+import sys
+import os
 
-# ==============================================================================
-# 🚀 PARCHE DE ENTORNO REFORZADO: Vinculación Nativa para Docker en Hugging Face
-# ==============================================================================
-def configurar_ffmpeg_nativo():
-    """Configura las variables de entorno usando el FFmpeg instalado en el sistema Docker."""
-    # Ruta estándar del binario instalado por apt-get en entornos linux-slim
-    ruta_binario = "/usr/bin/ffmpeg"
-    
-    # Si por alguna razón no estuviera ahí, buscamos en el PATH del sistema
-    if not os.path.exists(ruta_binario):
-        ruta_buscada = shutil.which("ffmpeg")
-        if ruta_buscada:
-            ruta_binario = ruta_buscada
-
-    os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
-    
-    dir_binario = os.path.dirname(ruta_binario)
-    if dir_binario not in os.environ["PATH"]:
-        os.environ["PATH"] = dir_binario + os.pathsep + os.environ["PATH"]
-            
-    return ruta_binario
-
-ruta_ffmpeg_activa = configurar_ffmpeg_nativo()
-
+# --- PARCHE DE COMPILACIÓN INTERNO PARA PILLOW ---
 try:
-    from moviepy.config import change_settings
-    change_settings({"FFMPEG_BINARY": ruta_ffmpeg_activa})
-except Exception as e:
-    print(f"Advertencia al configurar MoviePy de forma interna: {e}")
+    from PIL import Image
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--only-binary=:all:", "pillow"])
 
-# Importaciones limpias y protegidas
-import cv2
-import torch
-import yt_dlp
-import numpy as np
-import whisper
-from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+import uuid
+import streamlit as st
+from streamlit_cookies_controller import CookieController
+from supabase import create_client, Client
 
-# ==============================================================================
-# ⚙️ CONFIGURACIÓN DE DISPOSITIVO Y VARIABLES GLOBALES
-# ==============================================================================
-DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
-EMOJI_DICTIONARY = {
-    "dinero": "💰", "fuego": "🔥", "viral": "🔥", "ganar": "🏆",
-    "secreto": "🤫", "atención": "🚨", "mira": "👀", "importante": "⚠️",
-    "éxito": "🚀", "brutal": "🤯", "cambio": "🔄", "crecer": "📈",
-    "error": "❌", "meta": "🎯", "aprender": "🧠", "dinámica": "⚡",
-    "locura": "🤪", "redes": "📱", "truco": "💡", "ahora": "⏱️", "nunca": "🚫"
-}
-PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "hoy", "increíble", "revelado", "atención", "importante"}
+# Asegurar importación limpia del módulo local tasks.py
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+try:
+    from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
+except ImportError as e:
+    st.error(f"❌ Error al importar módulos en las tareas: {e}")
+    st.stop()
 
-def garantizar_fuente_fisica() -> str:
-    directorio_storage = os.path.abspath("storage")
-    os.makedirs(directorio_storage, exist_ok=True)
-    ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
-        
-    if os.path.exists(ruta_fuente) and os.path.getsize(ruta_fuente) > 10000:
-        return ruta_fuente
-    url_fuente = "https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf"
-    try:
-        respuesta = requests.get(url_fuente, timeout=15, stream=True)
-        if respuesta.status_code == 200:
-            with open(ruta_fuente, "wb") as archivo:
-                for chunk in respuesta.iter_content(chunk_size=8192):
-                    archivo.write(chunk)
-    except Exception:
-        pass
-    return ruta_fuente
+cookie_controller = CookieController()
 
-def garantizar_entorno_tarea(tarea_id: str) -> str:
-    ruta_tarea = os.path.join("storage", tarea_id)
-    os.makedirs(ruta_tarea, exist_ok=True)
-    return ruta_tarea
+# --- CONEXIÓN AUTOMÁTICA CON TU SUB-BASE (SUPABASE) ---
+SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
+SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
-def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
-    opciones = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': os.path.join(ruta_salida_dir, 'video_master_%(id)s.%(ext)s'),
-        'silent': True, 
-        'noplaylist': True
-    }
-    with yt_dlp.YoutubeDL(opciones) as ydl:
-        info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info)
+@st.cache_resource
+def init_supabase():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ==============================================================================
-# 🔥 DESCARGA DIRECTA DESDE OPENAI (BYPASS HUGGING FACE)
-# ==============================================================================
-def descargar_modelo_whisper_directo(tipo_modelo="base"):
-    urls_openai = {
-        "tiny": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf779f1bc05673c1d6e34246bb4824feb690f6f00a83e3a1e6ec/tiny.pt",
-        "base": "https://openaipublic.azureedge.net/main/whisper/models/ed441706eeac0471e65b24ac180941d769942d9c3a40e9d7729e2e43510db25a/base.pt"
-    }
-        
-    dir_modelos = os.path.expanduser("~/.cache/whisper")
-    os.makedirs(dir_modelos, exist_ok=True)
-    ruta_modelo = os.path.join(dir_modelos, f"{tipo_modelo}.pt")
-        
-    if os.path.exists(ruta_modelo) and os.path.getsize(ruta_modelo) > 100000000:
-        return ruta_modelo
-            
-    url = urls_openai.get(tipo_modelo, urls_openai["base"])
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, stream=True, timeout=30)
-        if r.status_code == 200:
-            with open(ruta_modelo, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk: f.write(chunk)
-            return ruta_modelo
-    except Exception:
-        pass
-    return tipo_modelo
+supabase: Client = init_supabase()
 
-def transcribir_video_por_palabras(ruta_video: str) -> list:
-    modelo_path = descargar_modelo_whisper_directo("base")
-    modelo = whisper.load_model(modelo_path, device=DISPOSITIVO)
-    resultado = modelo.transcribe(ruta_video, language="es", word_timestamps=True, fp16=False)
-        
-    segmentos_palabras = []
-    for segmento in resultado.get("segments", []):
-        for w in segmento.get("words", []):
-            segmentos_palabras.append({
-                "start": float(w["start"]),
-                "end": float(w["end"]),
-                "text": w["word"].strip()
-            })
-    return segmentos_palabras
+# --- TU DISEÑO Y ESTILO ORIGINAL ---
+st.markdown("""
+    <style>
+    .stApp { background-color: #05070a; color: #F1F5F9; }
+    h1, h2, h3, .stMarkdown strong { color: #deff9a !important; }
+    .stButton>button { background: #deff9a !important; color: #05070a !important; font-weight: 800 !important; border-radius: 10px !important; border: none !important; padding: 12px !important;}
+    .clip-card { background-color: #0f172a; padding: 20px; border-radius: 12px; border: 1px solid #1e293b; margin-bottom: 15px; }
+    .vip-badge { background-color: #deff9a; color: #05070a; padding: 4px 8px; border-radius: 5px; font-weight: bold; font-size: 12px; }
+    .free-badge { background-color: #475569; color: #FFFFFF; padding: 4px 8px; border-radius: 5px; font-weight: bold; font-size: 12px; }
+    </style>
+""", unsafe_allow_html=True)
 
-def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
-    cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
-        
-    ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
-    fotogramas_totales = int((t_fin - t_inicio) * fps)
-    centros_fotogramas = []
+st.title("⚡ ZexOS AI Studio Premium Max v3.5")
+st.subheader("El Suite Open-Source que supera a Opus Clip")
+
+saved_email = cookie_controller.get("zexos_user_email")
+email_usuario = st.text_input("Ingresar cuenta vinculada:", value=saved_email if saved_email else "").strip()
+
+if not email_usuario:
+    st.info("💡 Introduce tu dirección de acceso seguro para iniciar los clústeres de renderizado.")
+    st.stop()
+
+cookie_controller.set("zexos_user_email", email_usuario)
+
+# --- VERIFICACIÓN DE ESTADO VIP DESDE SUPABASE ---
+try:
+    respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
+    es_vip = len(respuesta.data) > 0
+except Exception:
+    es_vip = False
+
+# Control de consumo de minutos local para no-vip
+if "minutos_usados" not in st.session_state:
+    st.session_state.minutos_usados = 0
+minutos_consumidos = st.session_state.minutos_usados
+
+# Parámetros del Sidebar
+st.sidebar.subheader("🛠️ Panel de Configuración Experta")
+
+if es_vip:
+    st.sidebar.markdown('Tu Estado: <span class="vip-badge">👑 VIP PREMIUM</span>', unsafe_allow_html=True)
+    st.sidebar.caption("⚡ Almacenamiento en Hugging Face: Máximo 4GB habilitado.")
+    st.sidebar.caption("⏱️ Tiempo de procesamiento: Infinito.")
+else:
+    st.sidebar.markdown('Tu Estado: <span class="free-badge">👤 NO-VIP (FREE)</span>', unsafe_allow_html=True)
+    st.sidebar.caption("⚠️ Almacenamiento en Hugging Face: Limitado a 2GB (4GB VIP).")
+    st.sidebar.caption(f"⏱️ Minutos Disponibles: {120 - minutos_consumidos} de 120 min.")
     
-    for f_idx in range(fotogramas_totales):
-        ret, frame = cap.read()
-        if not ret: break
-                    
-        if f_idx % 4 == 0:
-            try:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                reducido = cv2.resize(gray, (0, 0), fx=0.25, fy=0.25)
-                                
-                sobely = cv2.Sobel(reducido, cv2.CV_64F, 0, 1, ksize=5)
-                abs_sobely = np.absolute(sobely)
-                scaled_sobel = np.uint8(255 * (abs_sobely / np.max(abs_sobely))) if np.max(abs_sobely) > 0 else reducido
-                                
-                column_sums = np.sum(scaled_sobel, axis=0)
-                centro_estimado = int(np.argmax(column_sums) * 4)
-                                
-                if 0 < centro_estimado < ancho_orig:
-                    centros_fotogramas.append(centro_estimado)
-                else:
-                    centros_fotogramas.append(ancho_orig // 2)
-            except:
-                centros_fotogramas.append(ancho_orig // 2)
+    st.sidebar.markdown("---")
+    st.sidebar.write("🏆 **Mejora a VIP por solo $10/mes:**")
+    url_paypal_sidebar = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=andres3320490@gmail.com&item_name=ZexOS%20AI%20Studio%20VIP&amount=10.00&currency_code=USD"
+    st.sidebar.markdown(f'<a href="{url_paypal_sidebar}" target="_blank"><button style="background-color:#deff9a; color:#05070a; border:none; padding:10px; border-radius:8px; font-weight:bold; width:100%; cursor:pointer;">💳 Pagar $10 con PayPal</button></a>', unsafe_allow_html=True)
+    st.sidebar.caption("Envía el comprobante para activación inmediata.")
+    st.sidebar.markdown("---")
+
+formato = st.sidebar.selectbox("Geometría del Cuadro", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
+plantilla = st.sidebar.selectbox("Diseño de Rótulos", options=["hormozi", "classic_three"])
+con_sub = st.sidebar.checkbox("Activar Subtitulado Inteligente", value=True)
+diccionario_manual = st.sidebar.text_area("Keywords de Alta Retención Temática:", placeholder="brutal, impactante")
+
+col_izq, col_der = st.columns([1, 1], gap="large")
+
+with col_izq:
+    st.subheader("📥 Carga de Medios Audiovisuales")
+    url_remoto = st.text_input("🔗 Enlace del Video Fuente:", placeholder="YouTube, Twitch, etc.")
+    video_subido = st.file_uploader("O arrastra el archivo directamente:", type=["mp4", "mkv"])
+    ejecutar = st.button("🚀 PARSEAR Y GENERAR CLIPS VIRALES")
+
+with col_der:
+    st.subheader("📊 Centro de Control de Curación Coherente")
+    
+    if ejecutar:
+        if not url_remoto.strip() and not video_subido:
+            st.error("❌ Por favor, proporciona una URL de video o arrastra un archivo local.")
         else:
-            if centros_fotogramas:
-                centros_fotogramas.append(centros_fotogramas[-1])
+            # --- CONFIGURACIÓN DE LÍMITES DE SUBIDA SEGÚN RANGO ---
+            ADMIN_EMAILS = ["andres3320490@gmail.com"]
+            
+            if email_usuario in ADMIN_EMAILS:
+                limite_gb = 6
+            elif es_vip:
+                limite_gb = 4
             else:
-                centros_fotogramas.append(ancho_orig // 2)
+                limite_gb = 2
                 
-    cap.release()
-    if not centros_fotogramas: centros_fotogramas = [ancho_orig // 2]
-        
-    suavizados = []
-    pos_actual = centros_fotogramas[0]
-    for pos_detectada in centros_fotogramas:
-        distancia = pos_detectada - pos_actual
-        factor_inercia = 0.50 if abs(distancia) > (ancho_orig // 4) else 0.12
-        pos_actual += int(distancia * factor_inercia)
-        suavizados.append(pos_actual)
+            limite_bytes = limite_gb * 1024 * 1024 * 1024
+            
+            if video_subido and video_subido.size > limite_bytes:
+                st.error(f"❌ El archivo excede el límite permitido para tu plan ({limite_gb} GB).")
+                st.stop()
                 
-    return {"coordenadas": suavizados, "fps": fps}
+            if not es_vip and email_usuario not in ADMIN_EMAILS and minutos_consumidos >= 120:
+                st.error("❌ Has agotado tus 120 minutos gratuitos.")
+                st.stop()
 
-def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
-    if duracion_total < 25.0 or not segmentos_palabras:
-        return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración del video."]}]
-        
-    ventanas = []
-    paso_tiempo = 10.0
-         
-    for inicio_bloque in np.arange(0, duracion_total - 15.0, paso_tiempo):
-        fin_bloque = min(duracion_total, inicio_bloque + 30.0)
-        palabras_bloque = [w for w in segmentos_palabras if inicio_bloque <= w["start"] <= fin_bloque]
-                
-        if len(palabras_bloque) < 5: continue
-                    
-        palabras_clave = 0
-        ganchos = []
-        for p in palabras_bloque:
-            p_limpia = p["text"].lower().strip(".,¡!¿?")
-            if p_limpia in PALABRAS_RETENCION:
-                palabras_clave += 1
-                if p_limpia not in ganchos: ganchos.append(p_limpia)
+            tarea_id = f"suite_{uuid.uuid4().hex[:12]}"
+            st.session_state.tarea_id = tarea_id
                         
-        wpm = (len(palabras_bloque) / (palabras_bloque[-1]["end"] - palabras_bloque[0]["start"])) * 60 if len(palabras_bloque) > 1 else 140
-        score = 65 + min(20, palabras_clave * 5) + (13 if 130 <= wpm <= 170 else 5)
-        score = min(99, int(score))
-                
-        reasons = [
-            f"⚡ Ritmo conversacional calibrado a {int(wpm)} WPM.",
-            f"🔑 Retención maximizada por palabras de impacto: {', '.join(ganchos[:3]) if ganchos else 'Discurso fluido'}."
-        ]
-                
-        ventanas.append({
-            "start": palabras_bloque[0]["start"],
-            "end": palabras_bloque[-1]["end"],
-            "score": score,
-            "reasons": reasons
-        })
-            
-    ventanas = sorted(ventanas, key=lambda x: x["score"], reverse=True)
-    clips_filtrados = []
-    for v in ventanas:
-        colision = False
-        for c in clips_filtrados:
-            if max(v["start"], c["start"]) < min(v["end"], c["end"]):
-                colision = True
-                break
-        if not colision:
-            clips_filtrados.append(v)
-            if len(clips_filtrados) >= max_clips: break
-                
-    return clips_filtrados if clips_filtrados else [{"start": 0.0, "end": duracion_total, "score": 85, "reasons": ["Segmento óptimo adaptado."]}]
-
-def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_palabras=3):
-    palabras_filtradas = [w for w in segmentos_palabras if t_ini <= w["start"] < t_fin]
-    bloques = []
-        
-    for i in range(0, len(palabras_filtradas), max_palabras):
-        grupo = palabras_filtradas[i:i + max_palabras]
-        if not grupo: continue 
-        bloques.append({
-            "start": grupo[0]["start"],
-            "end": grupo[-1]["end"],
-            "palabras": grupo
-        })
-    return bloques
-
-def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
-    dir_trabajo = garantizar_entorno_tarea(tarea_id)
-    clips_processed = []
-    garantizar_fuente_fisica()
-            
-    try:
-        if url_remoto and url_remoto.strip() != "":
-            ruta_video_master = descargar_video_remoto(url_remoto, dir_trabajo)
-                            
-        if diccionario_manual:
-            nuevos_ganchos = {p.strip().lower() for p in diccionario_manual.split(",") if p.strip()}
-            PALABRAS_RETENCION.update(nuevos_ganchos)
-                            
-        clip_completo = VideoFileClip(ruta_video_master)
-        duracion_total = clip_completo.duration
-                    
-        segmentos_palabras = []
-        if con_subtitulos:
-            segmentos_palabras = transcribir_video_por_palabras(ruta_video_master)
-                            
-        planes_de_corte = mapear_mejores_clips(segmentos_palabras, duracion_total)
-        
-        hex_c = color_sub_hex.lstrip('#')
-        rgb_c = tuple(int(hex_c[i:i+2], 16) for i in (0, 2, 4))
-        bgr_color_destacado = (rgb_c[2], rgb_c[1], rgb_c[0])
-                
-        for idx, plan in enumerate(planes_de_corte):
-            t_ini, t_fin = plan["start"], plan["end"]
-            chunk = clip_completo.subclip(t_ini, t_fin)
-            
-            tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
-            w_orig, h_orig = chunk.size
-            target_w = int(h_orig * (9 / 16)) if ("9:16" in formato or "Short" in formato) else w_orig
-            
-            bloques_texto = construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin) if (con_subtitulos and segmentos_palabras) else []
-
-            def transformar_y_subtitular_cuadros(get_frame, t):
-                # .copy() soluciona el bloqueo de memoria de tipo Read-Only
-                frame = get_frame(t).copy()
-                t_global = t_ini + t
-                
-                if "9:16" in formato or "Short" in formato:
-                    indice_f = min(int(t * tracking["fps"]), len(tracking["coordenadas"]) - 1)
-                    centro_x = tracking["coordenadas"][indice_f]
-                    x1 = max(0, min(w_orig - target_w, centro_x - (target_w // 2)))
-                    frame = frame[:, x1:x1 + target_w].copy()
-
-                if bloques_texto:
-                    for bloque in bloques_texto:
-                        if bloque["start"] <= t_global <= bloque["end"]:
-                            palabras_texto = []
-                            contiene_gancho = False
-                            
-                            for w in bloque["palabras"]:
-                                word_raw = w["text"].strip()
-                                palabra_limpia = word_raw.lower().strip(".,¡!¿?")
-                                if palabra_limpia in PALABRAS_RETENCION:
-                                    contiene_gancho = True
-                                emoji = EMOJI_DICTIONARY.get(palabra_limpia, "")
-                                palabras_texto.append(f"{emoji}{word_raw}" if emoji else word_raw)
-                                                    
-                            texto_bloque = " ".join(palabras_texto).upper()
-                            
-                            fuente = cv2.FONT_HERSHEY_DUPLEX
-                            escala = 1.2 if estilo_subtitulos == "hormozi" else 0.9
-                            grosor = 3
-                            color_texto = bgr_color_destacado if contiene_gancho else (255, 255, 255)
-                            
-                            tam, _ = cv2.getTextSize(texto_bloque, fuente, escala, grosor)
-                            tx = (frame.shape[1] - tam[0]) // 2
-                            ty = int(frame.shape[0] * 0.72)
-                            
-                            cv2.putText(frame, texto_bloque, (tx, ty), fuente, escala, (0, 0, 0), grosor + 4, cv2.LINE_AA)
-                            cv2.putText(frame, texto_bloque, (tx, ty), fuente, escala, color_texto, grosor, cv2.LINE_AA)
-                            break
-                            
-                return frame
-
-            chunk = chunk.fl(transformar_y_subtitular_cuadros, keep_duration=True)
-            
-            nombre_archivo = f"clip_{idx + 1}_viral.mp4"
-            ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
+            temp_dir = garantizar_entorno_tarea(tarea_id)
+            ruta_input = ""
                         
-            chunk.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
-            chunk.close()
-                        
-            clips_processed.append({
-                "archivo": nombre_archivo,
-                "score": f"{plan['score']}%",
-                "reporte": plan["reasons"]
-            })
+            if video_subido:
+                ruta_input = os.path.join(temp_dir, "video_subido.mp4")
+                with open(ruta_input, "wb") as buffer:
+                    buffer.write(video_subido.getvalue())
+                                
+            with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips...", expanded=True) as status:
+                try:
+                    resultado = pipeline_procesamiento_masivo(
+                        tarea_id=tarea_id, 
+                        ruta_video_master=ruta_input, 
+                        formato=formato,
+                        con_subtitulos=con_sub, 
+                        color_sub_hex="#deff9a", 
+                        estilo_subtitulos=plantilla, 
+                        url_remoto=url_remoto,
+                        diccionario_manual=diccionario_manual
+                    )
+                except Exception as ex:
+                    resultado = {"status": "error", "mensaje": f"Excepción interna detectada: {str(ex)}"}
+                                
+                if resultado and resultado.get("status") == "success":
+                    status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
+                    st.session_state.resultado_lote = resultado
+                    if not es_vip and email_usuario not in ADMIN_EMAILS:
+                        st.session_state.minutos_usados += 5
+                else:
+                    status.update(label="❌ Error crítico en el pipeline", state="error")
+                    mensaje_err = resultado.get("mensaje") if resultado else "Error inesperado (retornó None)"
+                    st.error(mensaje_err)
+
+    if "resultado_lote" in st.session_state and "tarea_id" in st.session_state:
+        res = st.session_state.resultado_lote
+        tid = st.session_state.tarea_id
+        dir_tarea = os.path.join("storage", tid)
+                
+        if res and "clips" in res:
+            st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos con alta probabilidad viral:**")
                     
-        clip_completo.close()
-        return {"status": "success", "clips": clips_processed}
-            
-    except Exception as err:
-        return {"status": "error", "mensaje": str(err)}
+            nombres_pestanas = [f"Clip {i+1} ({c['score']})" for i, c in enumerate(res["clips"])]
+            pestanas = st.tabs(nombres_pestanas)
+                    
+            for idx, c in enumerate(res["clips"]):
+                with pestanas[idx]:
+                    st.markdown("<div class='clip-card'>", unsafe_allow_html=True)
+                    st.metric(label="Score de Virabilidad Potencial", value=c["score"])
+                                    
+                    st.write("**Reporte de Indexación:**")
+                    for r in c["reporte"]:
+                        st.write(f"- {r}")
+                                    
+                    ruta_video = os.path.join(dir_tarea, c["archivo"])
+                    if os.path.exists(ruta_video):
+                        with open(ruta_video, "rb") as vf:
+                            st.video(vf.read())
+                                            
+                        with open(ruta_video, "rb") as vf:
+                            st.download_button(
+                                label=f"📥 Descargar Clip {idx + 1}",
+                                data=vf,
+                                file_name=c["archivo"],
+                                mime="video/mp4",
+                                key=f"dl_{idx}"
+                            )
+                    else:
+                        st.error("No se pudo localizar el archivo físico de este fragmento.")
+                    st.markdown("</div>", unsafe_allow_html=True)
