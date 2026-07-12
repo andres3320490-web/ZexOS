@@ -1,310 +1,14 @@
 import os
-import shutil
 import uuid
-import time
-import requests
 import datetime
 import numpy as np
-import cv2
-import torch
-import yt_dlp
-import urllib.request
 import streamlit as st
-from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 from supabase import create_client, Client
 from streamlit_cookies_controller import CookieController
-import whisper
 
-# =========================================================================
-# ⚙️ MOTOR DE INTELIGENCIA ARTIFICIAL AVANZADO (Estilo Opus Clip)
-# =========================================================================
-DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
+# IMPORTACIÓN DIRECTA DE LAS FUNCIONES DESDE TASKS.PY
+from tasks import garantizar_entorno_tarea, async_render_worker
 
-EMOJI_DICTIONARY = {
-    "dinero": "💰",
-    "fuego": "🔥",
-    "viral": "🔥",
-    "ganar": "🏆",
-    "secreto": "🤫",
-    "atención": "🚨",
-    "mira": "👀",
-    "importante": "⚠️"
-}
-
-PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy"}
-
-def garantizar_entorno_tarea(tarea_id: str) -> str:
-    ruta_tarea = os.path.join("storage", tarea_id)
-    os.makedirs(ruta_tarea, exist_ok=True)
-    return ruta_tarea
-
-def asegurar_cascade_anime(dir_trabajo: str) -> str:
-    ruta_xml = os.path.join(dir_trabajo, "lbpcascade_animeface.xml")
-    if not os.path.exists(ruta_xml):
-        url = "https://raw.githubusercontent.com/nagadomi/lbpcascade_animeface/master/lbpcascade_animeface.xml"
-        try:
-            urllib.request.urlretrieve(url, ruta_xml)
-        except:
-            if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
-                return cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            return "haarcascade_frontalface_default.xml"
-    return ruta_xml
-
-def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
-    opciones = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': os.path.join(ruta_salida_dir, 'video_remoto_%(id)s.%(ext)s'),
-        'silent': True, 
-        'noplaylist': True
-    }
-    with yt_dlp.YoutubeDL(opciones) as ydl:
-        info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info)
-
-def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fin: float):
-    cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
-    
-    ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
-    fotogramas_totales = int((t_fin - t_inicio) * fps)
-    registro_rostros = []
-    
-    detector_disponible = hasattr(cv2, 'CascadeClassifier')
-    cascade_humano = None
-    cascade_anime = None
-    
-    if detector_disponible:
-        try:
-            if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
-                cascade_humano = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            else:
-                cascade_humano = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-            
-            ruta_anime_xml = asegurar_cascade_anime("storage")
-            cascade_anime = cv2.CascadeClassifier(ruta_anime_xml)
-        except:
-            detector_disponible = False
-
-    for f_idx in range(fotogramas_totales):
-        ret, frame = cap.read()
-        if not ret: 
-            break
-            
-        if f_idx % 8 == 0:
-            coordenadas_x = []
-            if detector_disponible and cascade_humano is not None:
-                try:
-                    gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (0, 0), fx=0.25, fy=0.25)
-                    faces = cascade_humano.detectMultiScale(gray, 1.3, 3)
-                                
-                    if len(faces) == 0 and cascade_anime is not None:
-                        faces = cascade_anime.detectMultiScale(gray, 1.1, 3)
-                        
-                    coordenadas_x = sorted([int((x + w // 2) * 4) for (x, _, w, _) in faces])
-                except:
-                    pass
-            registro_rostros.append(coordenadas_x)
-            
-    cap.release()
-        
-    centros_raw = [f[0] if f else ancho_orig // 2 for f in registro_rostros]
-    if not centros_raw: 
-        centros_raw = [ancho_orig // 2]
-        
-    suavizados = []
-    pos_actual = centros_raw[0]
-    for pos_detectada in centros_raw:
-        distancia = pos_detectada - pos_actual
-        factor_inercia = 1.0 if abs(distancia) > (ancho_orig // 3) else (0.05 if abs(distancia) < 25 else 0.35)
-        pos_actual += int(distancia * factor_inercia)
-        suavizados.append(pos_actual)
-            
-    return {"modo": "single", "data": lambda t: suavizados[min(int(t * (fps / 8)), len(suavizados) - 1)]}
-
-# =========================================================================
-# 🚀 ORQUESTADOR DE RENDERIZADO Y CURACIÓN DE CONTENIDO
-# =========================================================================
-def async_render_worker(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
-    dir_trabajo = garantizar_entorno_tarea(tarea_id)
-    ruta_audio_full = os.path.join(dir_trabajo, "temp_voice.wav")
-        
-    try:
-        if url_remoto and url_remoto.strip() != "":
-            ruta_video_master = descargar_video_remoto(url_remoto, dir_trabajo)
-        else:
-            if not ruta_video_master or not os.path.exists(ruta_video_master):
-                archivos_en_dir = [os.path.join(dir_trabajo, f) for f in os.listdir(dir_trabajo) if f.endswith(('.mp4', '.mkv', '.mov'))]
-                if archivos_en_dir:
-                    ruta_video_master = archivos_en_dir[0]
-                else:
-                    raise FileNotFoundError("No se encontró ningún archivo de video válido.")
-                    
-        if diccionario_manual:
-            nuevos_ganchos = {p.strip().lower() for p in diccionario_manual.split(",") if p.strip()}
-            PALABRAS_RETENCION.update(nuevos_ganchos)
-                    
-        clip_completo = VideoFileClip(ruta_video_master)
-        
-        audio_disponible = False
-        if clip_completo.audio is not None:
-            try:
-                clip_completo.audio.write_audiofile(ruta_audio_full, fps=16000, nbytes=2, logger=None)
-                audio_disponible = True
-            except:
-                try:
-                    clip_completo.audio.write_audiofile(ruta_audio_full, fps=16000, logger=None)
-                    audio_disponible = True
-                except:
-                    pass
-
-        # 🧠 NUEVA MEJORA 1: Curación e Inteligencia de Estructura Temporal con Whisper
-        segmentos_palabras = []
-        tiempo_final_logico = min(40.0, clip_completo.duration) 
-        
-        if con_subtitulos and audio_disponible and os.path.exists(ruta_audio_full):
-            try:
-                modelo_whisper = whisper.load_model("base", device=DISPOSITIVO)
-                resultado_transcripcion = modelo_whisper.transcribe(ruta_audio_full, word_timestamps=True)
-                
-                for segmento in resultado_transcripcion.get("segments", []):
-                    for word_obj in segmento.get("words", []):
-                        segmentos_palabras.append({
-                            "start": word_obj["start"],
-                            "end": word_obj["end"],
-                            "text": word_obj["word"].strip()
-                        })
-                
-                # Buscar un final lógico (silencio o cierre de frase) cercano a los 30-45 segundos
-                if segmentos_palabras:
-                    candidatos = [w for w in segmentos_palabras if 25.0 <= w["end"] <= 45.0]
-                    if candidatos:
-                        tiempo_final_logico = candidatos[-1]["end"]
-            except Exception:
-                segmentos_palabras = [
-                    {"start": 0.5, "end": 2.5, "text": "¡ATENCIÓN A ESTO!"},
-                    {"start": 2.8, "end": 5.0, "text": "PROCESANDO VIDEO"}
-                ]
-                
-        t_ini, t_fin = 0.0, tiempo_final_logico
-        
-        if hasattr(clip_completo, 'subclipped'):
-            chunk = clip_completo.subclipped(t_ini, t_fin)
-        elif hasattr(clip_completo, 'subclip'):
-            chunk = clip_completo.subclip(t_ini, t_fin)
-        else:
-            chunk = clip_completo.cropped(start_time=t_ini, end_time=t_fin)
-            
-        duracion_chunk = chunk.duration
-        es_short = "9:16" in formato
-                    
-        if es_short:
-            w_orig, h_orig = chunk.size
-            target_w = int(h_orig * (9 / 16))
-            
-            meta_rostros = analizar_rostros_predictive_vectorial(ruta_video_master, t_ini, t_fin)
-            fn_centro = meta_rostros["data"]
-                            
-            def transformar_cuadros(get_frame, t):
-                frame = get_frame(t)
-                x1 = max(0, min(w_orig - target_w, fn_centro(t) - (target_w // 2)))
-                return frame[:, x1:x1 + target_w]
-            
-            if hasattr(chunk, 'transform'):
-                chunk = chunk.transform(transformar_cuadros)
-            else:
-                chunk = chunk.with_transform(transformar_cuadros)
-                        
-        componentes_chunk = [chunk]
-                    
-        if con_subtitulos:
-            for w_info in segmentos_palabras:
-                w_start = max(0.0, w_info["start"] - t_ini)
-                w_end = min(duracion_chunk, w_info["end"] - t_ini)
-                if w_start >= duracion_chunk or w_start >= w_end: 
-                    continue
-                                    
-                word_raw = w_info["text"].strip()
-                if not word_raw:
-                    continue
-                
-                # 🧠 NUEVA MEJORA 2: Inserción Automatizada de Emojis Reales
-                palabra_limpia = word_raw.lower().strip(".,¡!¿?")
-                emoji_adicional = EMOJI_DICTIONARY.get(palabra_limpia, "")
-                texto_final_sub = f"{emoji_adicional} {word_raw}" if emoji_adicional else word_raw
-                    
-                color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
-                                    
-                try:
-                    txt_clip = TextClip(
-                        text=texto_final_sub.upper(),
-                        font_size=46 if estilo_subtitulos == "hormozi" else 34,
-                        color=color_actual,
-                        font="Liberation-Sans-Bold", 
-                        size=(chunk.size[0] - 40, None)
-                    )
-                except:
-                    txt_clip = TextClip(
-                        text=texto_final_sub.upper(),
-                        font_size=40,
-                        color=color_actual,
-                        size=(chunk.size[0] - 40, None)
-                    )
-
-                if hasattr(txt_clip, 'with_duration'):
-                    txt_clip = txt_clip.with_duration(max(0.15, w_end - w_start)).with_start(w_start).with_position(('center', int(chunk.size[1] * 0.70)))
-                else:
-                    txt_clip = txt_clip.set_duration(max(0.15, w_end - w_start)).set_start(w_start).set_position(('center', int(chunk.size[1] * 0.70)))
-                                    
-                # 🧠 NUEVA MEJORA 3: Algoritmo de Animación Fluida (Pop-Scale Efecto Opus)
-                def animar_subtitulo(get_frame, t):
-                    img = get_frame(t)
-                    if t < 0.08:
-                        escala = 1.12 - (t * 1.5)
-                        escala = max(1.0, escala)
-                        h_i, w_i = img.shape[:2]
-                        img_scaled = cv2.resize(img, (0, 0), fx=escala, fy=escala, interpolation=cv2.INTER_LINEAR)
-                        h_s, w_s = img_scaled.shape[:2]
-                        crop_y = (h_s - h_i) // 2
-                        crop_x = (w_s - w_i) // 2
-                        return img_scaled[crop_y:crop_y+h_i, crop_x:crop_x+w_i]
-                    return img
-                    
-                if hasattr(txt_clip, 'transform'):
-                    txt_clip = txt_clip.transform(animar_subtitulo)
-                else:
-                    txt_clip = txt_clip.with_transform(animar_subtitulo)
-                    
-                componentes_chunk.append(txt_clip)
-                            
-        video_render_chunk = CompositeVideoClip(componentes_chunk)
-        ruta_salida_segmento = os.path.join(dir_trabajo, f"clip_1_viral_{tarea_id[:5]}.mp4")
-        
-        try:
-            video_render_chunk.write_videofile(ruta_salida_segmento, fps=30, codec='libx264', audio_codec='aac', logger=None)
-        except:
-            video_render_chunk.write_videofile(ruta_salida_segmento, fps=30, codec='libx264', audio_codec='aac')
-            
-        video_render_chunk.close()
-        clip_completo.close()
-        
-        if os.path.exists(ruta_audio_full): 
-            os.remove(ruta_audio_full)
-            
-        return {
-            "status": "success",
-            "total_clips": 1,
-            "viral_score": f"{np.random.randint(92, 99)}%",
-            "analisis_popularidad": "Corte de retención estructurado por silencios, subtítulos enriquecidos con emojis y rastreo cinemático activo."
-        }
-    except Exception as err:
-        if os.path.exists(ruta_audio_full): 
-            os.remove(ruta_audio_full)
-        return {"status": "error", "mensaje": str(err)}
-
-# =========================================================================
-# 🗄️ CONTROLADORES E INTERFAZ DE USUARIO
-# =========================================================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
@@ -322,9 +26,6 @@ st.markdown("""
     .stApp { background-color: #07090e; color: #E2E8F0; }
     h1, h2, h3, .stMarkdown strong { color: #deff9a !important; font-family: 'Inter', sans-serif; }
     .stButton>button { width: 100%; background: #deff9a !important; color: #07090e !important; font-weight: bold !important; border-radius: 8px !important; }
-    .badge-admin { background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
-    .badge-vip { background-color: #eab308; color: black; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
-    .badge-normal { background-color: #3b82f6; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -339,19 +40,12 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-user_role = "normal"
-payment_status = "Plan Gratuito Activo"
-
-if email_usuario.lower() == "andres3320490@gmail.com" or email_usuario.endswith("@zexos.ai"):
-    user_role = "admin"
-    payment_status = "Cuenta Propietaria Master"
-
 # Sidebar y Parámetros
 st.sidebar.subheader("🔒 Configuración ZexOS")
 formato_seleccionado = st.sidebar.selectbox("Relación de Aspecto Target", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 con_subtitulos = st.sidebar.checkbox("Subtítulos Dinámicos Inteligentes", value=True)
 stilo_elegido = st.sidebar.selectbox("Plantilla Tipográfica", options=["hormozi", "classic_three"])
-diccionario_manual = st.sidebar.text_area("Palabras clave extra (separadas por coma):", placeholder="brutal, éxito", height=80)
+diccionario_manual = st.sidebar.text_area("Palabras clave extra:", placeholder="brutal, éxito", height=80)
 
 col_izq, col_der = st.columns([1, 1], gap="large")
 
@@ -367,6 +61,8 @@ with col_der:
     if boton_procesar:
         tarea_id = f"job_{uuid.uuid4().hex[:10]}"
         st.session_state.tarea_id = tarea_id
+        
+        # Uso de la función importada para configurar carpetas corporativas
         temp_dir = garantizar_entorno_tarea(tarea_id)
         ruta_input = ""
         
@@ -375,7 +71,8 @@ with col_der:
             with open(ruta_input, "wb") as buffer:
                 buffer.write(video_subido.getvalue())
         
-        with st.status("Analizando composición y renderizando...", expanded=True) as status:
+        with st.status("Procesando con el motor externo de IA...", expanded=True) as status:
+            # Llamado directo al trabajador asíncrono importado
             resultado = async_render_worker(
                 tarea_id=tarea_id, 
                 ruta_video_master=ruta_input, 
@@ -398,8 +95,7 @@ with col_der:
         res = st.session_state.resultado_tarea
         tid = st.session_state.tarea_id
         
-        st.metric(label="Score de Virabilidad Estegano-Gráfico", value=res.get("viral_score"))
-        st.caption(f"ℹ️ {res.get('analisis_popularidad')}")
+        st.metric(label="Score de Virabilidad Predictivo", value=res.get("viral_score"))
         
         dir_tarea = os.path.join("storage", tid)
         if os.path.exists(dir_tarea):
