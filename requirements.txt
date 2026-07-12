@@ -1,15 +1,10 @@
-moviepy>=2.0.0
-imageio[ffmpeg]
-ffmpeg-python
+moviepy==1.0.3
+imageio==2.25.1
+imageio-ffmpeg==0.4.8
 openai-whisper
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.2.0+cpu
-torchvision==0.17.0+cpu
-torchaudio==2.2.0+cpu
 yt-dlp
+torch
+numpy
 opencv-python-headless
-requests
-numpy<2.0.0
-# --- Interfaz de Usuario y Controladores ---
-streamlit==1.59.1
 streamlit-cookies-controller
+requests
