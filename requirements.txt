@@ -7,7 +7,5 @@ streamlit-cookies-controller
 numpy
 opencv-python-headless
 yt-dlp
-pillow==10.2.0
-openai-whisper
 moviepy==2.0.0
 torch
