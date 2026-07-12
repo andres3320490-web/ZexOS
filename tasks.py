@@ -172,12 +172,10 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                 w_orig, h_orig = chunk.size
                 target_w = int(h_orig * (9 / 16))
                 
-                # Ajustamos la función para la API moderna de MoviePy 2.0.0
                 def transformar_cuadros(frame):
                     x1 = max(0, min(w_orig - target_w, (w_orig // 2) - (target_w // 2)))
                     return frame[:, x1:x1 + target_w]
                 
-                # CORREGIDO PARA MOVIEPY 2.0.0: image_transform reemplaza a fl_image
                 chunk = chunk.image_transform(transformar_cuadros)
             
             componentes_chunk = [chunk]
@@ -195,11 +193,13 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
+                        # CORREGIDO: Se cambió "Liberation-Sans-Bold" por "DejaVu-Sans-Bold", 
+                        # la cual está disponible de forma nativa en entornos Linux/Streamlit Cloud.
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
-                            font="Liberation-Sans-Bold",
+                            font="DejaVu-Sans-Bold",
                             size=(chunk.size[0] - 40, None)
                         )
                         
@@ -211,7 +211,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         def animar_subtitulo(image):
                             return image
                             
-                        # CORREGIDO PARA MOVIEPY 2.0.0: image_transform para el texto
                         txt_clip = txt_clip.image_transform(animar_subtitulo)
                         componentes_chunk.append(txt_clip)
                         
