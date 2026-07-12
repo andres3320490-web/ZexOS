@@ -10,5 +10,6 @@ yt-dlp
 opencv-python-headless
 requests
 numpy<2.0.0
-streamlit
+# --- Interfaz de Usuario y Controladores ---
+streamlit==1.59.1
 streamlit-cookies-controller
