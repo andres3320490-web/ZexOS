@@ -3,7 +3,9 @@ import cv2
 import torch
 import yt_dlp
 import numpy as np
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+
+# CORREGIDO PARA MOVIEPY 2.0.0 (Sin .editor)
+from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -144,7 +146,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             
         segmentos_palabras = []
         if con_subtitulos and os.path.exists(ruta_audio_full):
-            # --- INSTALACIÓN DINÁMICA SEGURA DE WHISPER ---
+            # --- INSTALACIÓN DINÁMICA DE WHISPER PARA EVITAR ERRORES DE PILLOW ---
             try:
                 import whisper
             except ImportError:
@@ -208,7 +210,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                             size=(chunk.size[0] - 40, None)
                         )
                         
-                        # Configuración de propiedades no mutables estable para MoviePy 2.0.0
                         txt_clip = (txt_clip
                                     .set_duration(max(0.15, w_end - w_start))
                                     .set_start(w_start)
@@ -235,7 +236,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             video_final.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
             video_final.close()
             
-            # Lista corregida en español tal como se declaró arriba
             clips_procesados.append({
                 "archivo": nombre_archivo,
                 "score": f"{plan['score']}%",
