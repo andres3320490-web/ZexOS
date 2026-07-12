@@ -2,6 +2,7 @@ import os
 import cv2
 import torch
 import yt_dlp
+import requests
 import numpy as np
 
 # Importación directa para MoviePy 2.0.0
@@ -17,6 +18,22 @@ EMOJI_DICTIONARY = {
 }
 
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
+
+def garantizar_fuente_local() -> str:
+    """Descarga una fuente TTF estándar si no existe localmente para evitar fallos de Pillow."""
+    ruta_fuente = os.path.join("storage", "Roboto-Bold.ttf")
+    os.makedirs("storage", exist_ok=True)
+    if not os.path.exists(ruta_fuente):
+        url_fuente = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
+        try:
+            respuesta = requests.get(url_fuente, timeout=10)
+            if respuesta.status_code == 200:
+                with open(ruta_fuente, "wb") as f:
+                    f.write(respuesta.content)
+                return ruta_fuente
+        except Exception:
+            pass
+    return ruta_fuente if os.path.exists(ruta_fuente) else "Arial"
 
 def garantizar_entorno_tarea(tarea_id: str) -> str:
     ruta_tarea = os.path.join("storage", tarea_id)
@@ -129,6 +146,9 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_procesados = []
+    
+    # Garantizar la existencia de la fuente local válida
+    fuente_segura = garantizar_fuente_local()
         
     try:
         if url_remoto and url_remoto.strip() != "":
@@ -193,13 +213,12 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # CORREGIDO: Se cambió "Liberation-Sans-Bold" por "DejaVu-Sans-Bold", 
-                        # la cual está disponible de forma nativa en entornos Linux/Streamlit Cloud.
+                        # CORREGIDO: Ahora usa la ruta física absoluta de la fuente Roboto descargada
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
-                            font="DejaVu-Sans-Bold",
+                            font=fuente_segura,
                             size=(chunk.size[0] - 40, None)
                         )
                         
