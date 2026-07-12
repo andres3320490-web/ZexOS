@@ -3,39 +3,46 @@ import sys
 import subprocess
 
 # ==============================================================================
-# 🚀 PARCHE DE ENTORNO EN CLOUD: Vinculación Estricta de FFmpeg
+# 🚀 PARCHE DEFINITIVO: Forzar instalación y vinculación de FFmpeg Estático
 # ==============================================================================
-def asegurar_ffmpeg_global():
-    # Intentar buscarlo primero en rutas estándar de Linux en Streamlit Cloud
+def forzar_instalacion_ffmpeg():
+    """Garantiza la existencia de FFmpeg descargando un binario estático directo a la app."""
+    # 1. Comprobar si ya está mapeado en el sistema
     rutas_comunes = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
     for ruta in rutas_comunes:
         if os.path.exists(ruta):
             os.environ["IMAGEIO_FFMPEG_EXE"] = ruta
             return ruta
-            
-    # Si no se encuentra en el sistema, descargar binario estático local de emergencia
+
+    # 2. Si no existe, forzar la descarga del binario ejecutable mediante imageio-ffmpeg
     try:
         import imageio_ffmpeg
-        ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
-        os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
-        return ruta_binario
     except ImportError:
+        # Instalar la librería de binarios estáticos si no está presente
         subprocess.check_call([sys.executable, "-m", "pip", "install", "imageio-ffmpeg"])
         import imageio_ffmpeg
-        ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
-        os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
-        return ruta_binario
+    
+    ruta_binario = imageio_ffmpeg.get_ffmpeg_exe()
+    
+    # 3. Inyectar el binario en las variables de entorno globales del sistema
+    os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
+    dir_binario = os.path.dirname(ruta_binario)
+    if dir_binario not in os.environ["PATH"]:
+        os.environ["PATH"] = dir_binario + os.pathsep + os.environ["PATH"]
+        
+    return ruta_binario
 
-ruta_ffmpeg_activa = asegurar_ffmpeg_global()
-os.environ["PATH"] += os.pathsep + os.path.dirname(ruta_ffmpeg_activa)
+# Ejecutar la inyección del binario antes de que cualquier otra librería intente buscarlo
+ruta_ffmpeg_activa = forzar_instalacion_ffmpeg()
 
+# Configurar MoviePy 2.0.0 para usar el ejecutable descargado
 try:
     from moviepy.config import change_settings
     change_settings({"FFMPEG_BINARY": ruta_ffmpeg_activa})
 except Exception as e:
     print(f"Advertencia al configurar MoviePy de forma interna: {e}")
 
-# Importaciones seguras de dependencias masivas
+# Ahora se pueden importar de forma segura las librerías que dependen de FFmpeg
 import cv2
 import torch
 import yt_dlp
