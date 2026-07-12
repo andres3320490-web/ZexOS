@@ -1,28 +1,25 @@
 import subprocess
 import sys
-
-try:
-    import pkg_resources
-except ImportError:
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "setuptools"])
-        import pkg_resources
-    except Exception:
-        import os
-        sys.modules['pkg_resources'] = sys.modules.get('pip._vendor.pkg_resources', None)
-
 import os
+
+# --- PARCHE DE COMPILACIÓN INTERNO PARA PILLOW ---
+try:
+    from PIL import Image
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--only-binary=:all:", "pillow"])
+
 import uuid
 import streamlit as st
 from streamlit_cookies_controller import CookieController
 from supabase import create_client, Client
 
+# Asegurar importación limpia del módulo local tasks.py
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
 
 cookie_controller = CookieController()
 
-# --- CONEXIÓN AUTOMÁTICA CON TU SUB-BASE ---
+# --- CONEXIÓN AUTOMÁTICA CON TU SUB-BASE (SUPABASE) ---
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
@@ -32,9 +29,7 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
-# --- CONFIGURACIÓN VISUAL ORIGINAL ---
-st.set_page_config(page_title="ZexOS AI Studio", page_icon="⚡", layout="wide")
-
+# --- TU DISEÑO Y ESTILO ORIGINAL ---
 st.markdown("""
     <style>
     .stApp { background-color: #05070a; color: #F1F5F9; }
@@ -58,18 +53,19 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-# Validar Estado VIP
+# --- VERIFICACIÓN DE ESTADO VIP DESDE SUPABASE ---
 try:
     respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
     es_vip = len(respuesta.data) > 0
 except Exception:
     es_vip = False
 
+# Control de consumo de minutos local para no-vip
 if "minutos_usados" not in st.session_state:
     st.session_state.minutos_usados = 0
 minutos_consumidos = st.session_state.minutos_usados
 
-# --- SIDEBAR ORIGINAL ---
+# Parámetros del Sidebar
 st.sidebar.subheader("🛠️ Panel de Configuración Experta")
 
 if es_vip:
@@ -93,7 +89,6 @@ plantilla = st.sidebar.selectbox("Diseño de Rótulos", options=["hormozi", "cla
 con_sub = st.sidebar.checkbox("Activar Subtitulado Inteligente", value=True)
 diccionario_manual = st.sidebar.text_area("Keywords de Alta Retención Temática:", placeholder="brutal, impactante")
 
-# --- INTERFAZ ---
 col_izq, col_der = st.columns([1, 1], gap="large")
 
 with col_izq:
@@ -104,13 +99,11 @@ with col_izq:
 
 with col_der:
     st.subheader("📊 Centro de Control de Curación Coherente")
-    
-    if ejecutar:
+        if ejecutar:
         if not url_remoto.strip() and not video_subido:
             st.error("❌ Por favor, proporciona una URL de video o arrastra un archivo local.")
         else:
             limite_bytes = (4 if es_vip else 2) * 1024 * 1024 * 1024
-            
             if video_subido and video_subido.size > limite_bytes:
                 st.error(f"❌ El archivo excede el límite permitido para tu plan ({4 if es_vip else 2} GB).")
                 st.stop()
@@ -121,15 +114,15 @@ with col_der:
 
             tarea_id = f"suite_{uuid.uuid4().hex[:12]}"
             st.session_state.tarea_id = tarea_id
-            
+                        
             temp_dir = garantizar_entorno_tarea(tarea_id)
             ruta_input = ""
-            
+                        
             if video_subido:
                 ruta_input = os.path.join(temp_dir, "video_subido.mp4")
                 with open(ruta_input, "wb") as buffer:
                     buffer.write(video_subido.getvalue())
-                    
+                                
             with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips...", expanded=True) as status:
                 resultado = pipeline_procesamiento_masivo(
                     tarea_id=tarea_id, 
@@ -141,9 +134,9 @@ with col_der:
                     url_remoto=url_remoto,
                     diccionario_manual=diccionario_manual
                 )
-                
+                                
                 if resultado.get("status") == "success":
-                    status.update(label="✨ ¡Procesamiento completado!", state="complete", expanded=False)
+                    status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
                     st.session_state.resultado_lote = resultado
                     if not es_vip:
                         st.session_state.minutos_usados += 5
@@ -155,19 +148,34 @@ with col_der:
         res = st.session_state.resultado_lote
         tid = st.session_state.tarea_id
         dir_tarea = os.path.join("storage", tid)
-        
-        st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos:**")
-        pestanas = st.tabs([f"Clip {i+1} ({c['score']}%)" for i, c in enumerate(res["clips"])])
-        
+                
+        st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos con alta probabilidad viral:**")
+                
+        nombres_pestanas = [f"Clip {i+1} ({c['score']})" for i, c in enumerate(res["clips"])]
+        pestanas = st.tabs(nombres_pestanas)
+                
         for idx, c in enumerate(res["clips"]):
             with pestanas[idx]:
                 st.markdown("<div class='clip-card'>", unsafe_allow_html=True)
-                st.metric(label="Score de Virabilidad Potencial", value=f"{c['score']}%")
-                
+                st.metric(label="Score de Virabilidad Potencial", value=c["score"])
+                                
+                st.write("**Reporte de Indexación:**")
+                for r in c["reporte"]:
+                    st.write(f"- {r}")
+                                
                 ruta_video = os.path.join(dir_tarea, c["archivo"])
                 if os.path.exists(ruta_video):
                     with open(ruta_video, "rb") as vf:
                         st.video(vf.read())
+                                        
                     with open(ruta_video, "rb") as vf:
-                        st.download_button(label=f"📥 Descargar Clip {idx + 1}", data=vf, file_name=c["archivo"], mime="video/mp4", key=f"dl_{idx}")
+                        st.download_button(
+                            label=f"📥 Descargar Clip {idx + 1}",
+                            data=vf,
+                            file_name=c["archivo"],
+                            mime="video/mp4",
+                            key=f"dl_{idx}"
+                        )
+                else:
+                    st.error("No se pudo localizar el archivo físico de este fragmento.")
                 st.markdown("</div>", unsafe_allow_html=True)
