@@ -1,8 +1,6 @@
 import subprocess
 import sys
 
-# --- PARCHE MODERNO DE INYECCIÓN DE DEPENDENCIAS ---
-# Si setuptools no existe en el sistema, la app lo descarga sola en el acto
 try:
     import pkg_resources
 except ImportError:
@@ -10,7 +8,6 @@ except ImportError:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "setuptools"])
         import pkg_resources
     except Exception:
-        # Alternativa secundaria si el entorno restringe setuptools
         import os
         sys.modules['pkg_resources'] = sys.modules.get('pip._vendor.pkg_resources', None)
 
@@ -18,12 +15,22 @@ import os
 import uuid
 import streamlit as st
 from streamlit_cookies_controller import CookieController
+from supabase import create_client, Client
 
-# Asegurar importación limpia del módulo local tasks.py
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
 
 cookie_controller = CookieController()
+
+# --- CONEXIÓN AUTOMÁTICA CON TU SUB-BASE ---
+SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
+SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
+
+@st.cache_resource
+def init_supabase():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase: Client = init_supabase()
 
 # --- CONFIGURACIÓN VISUAL ORIGINAL ---
 st.set_page_config(page_title="ZexOS AI Studio", page_icon="⚡", layout="wide")
@@ -42,14 +49,6 @@ st.markdown("""
 st.title("⚡ ZexOS AI Studio Premium Max v3.5")
 st.subheader("El Suite Open-Source que supera a Opus Clip")
 
-# --- SIMULACIÓN DE LA BASE DE DATOS (SUB-BASE PREVIA) ---
-if "subbase_usuarios" not in st.session_state:
-    st.session_state.subbase_usuarios = {
-        "admin@zexos.com": {"vip": True, "minutos_usados": 0},
-    }
-if "cuentas_creadas_ip" not in st.session_state:
-    st.session_state.cuentas_creadas_ip = 1  
-
 saved_email = cookie_controller.get("zexos_user_email")
 email_usuario = st.text_input("Ingresar cuenta vinculada:", value=saved_email if saved_email else "").strip()
 
@@ -57,26 +56,20 @@ if not email_usuario:
     st.info("💡 Introduce tu dirección de acceso seguro para iniciar los clústeres de renderizado.")
     st.stop()
 
-# --- LÓGICA DE CONTROL DE CUENTAS (MÁXIMO 3 PARA NO-VIP) ---
-if email_usuario not in st.session_state.subbase_usuarios:
-    if st.session_state.cuentas_creadas_ip >= 3:
-        st.error("❌ Has alcanzado el límite máximo de 3 cuentas permitidas para usuarios No-VIP en esta infraestructura.")
-        st.info("💡 Para registrar más cuentas o remover este límite, adquiere el plan VIP.")
-        
-        url_paypal_bloqueo = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=andres3320490@gmail.com&item_name=ZexOS%20AI%20Studio%20VIP&amount=10.00&currency_code=USD"
-        st.markdown(f'<a href="{url_paypal_bloqueo}" target="_blank"><button style="background-color:#deff9a; color:#05070a; border:none; padding:12px; border-radius:10px; font-weight:bold; width:100%; cursor:pointer;">🌟 DESBLOQUEAR ACCESO VIP ($10/mes)</button></a>', unsafe_allow_html=True)
-        st.stop()
-    else:
-        st.session_state.subbase_usuarios[email_usuario] = {"vip": False, "minutos_usados": 0}
-        st.session_state.cuentas_creadas_ip += 1
-
 cookie_controller.set("zexos_user_email", email_usuario)
 
-# Obtener estado actual del usuario desde la sub-base
-es_vip = st.session_state.subbase_usuarios[email_usuario]["vip"]
-minutos_consumidos = st.session_state.subbase_usuarios[email_usuario]["minutos_usados"]
+# Validar Estado VIP
+try:
+    respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
+    es_vip = len(respuesta.data) > 0
+except Exception:
+    es_vip = False
 
-# --- SIDEBAR ORIGINAL CON AGREGADOS DE ESTADO VIP & PAYPAL ---
+if "minutos_usados" not in st.session_state:
+    st.session_state.minutos_usados = 0
+minutos_consumidos = st.session_state.minutos_usados
+
+# --- SIDEBAR ORIGINAL ---
 st.sidebar.subheader("🛠️ Panel de Configuración Experta")
 
 if es_vip:
@@ -100,7 +93,7 @@ plantilla = st.sidebar.selectbox("Diseño de Rótulos", options=["hormozi", "cla
 con_sub = st.sidebar.checkbox("Activar Subtitulado Inteligente", value=True)
 diccionario_manual = st.sidebar.text_area("Keywords de Alta Retención Temática:", placeholder="brutal, impactante")
 
-# --- INTERFAZ DE DOS COLUMNAS ORIGINAL ---
+# --- INTERFAZ ---
 col_izq, col_der = st.columns([1, 1], gap="large")
 
 with col_izq:
@@ -116,19 +109,14 @@ with col_der:
         if not url_remoto.strip() and not video_subido:
             st.error("❌ Por favor, proporciona una URL de video o arrastra un archivo local.")
         else:
-            # --- VALIDACIÓN: LÍMITE DE TAMAÑO (2GB vs 4GB) ---
             limite_bytes = (4 if es_vip else 2) * 1024 * 1024 * 1024
             
             if video_subido and video_subido.size > limite_bytes:
-                st.error(f"❌ El archivo excede el límite permitido para tu plan actual ({4 if es_vip else 2} GB).")
-                if not es_vip:
-                    st.info("🌟 Los usuarios VIP disfrutan del límite completo de 4GB configurado en Hugging Face.")
+                st.error(f"❌ El archivo excede el límite permitido para tu plan ({4 if es_vip else 2} GB).")
                 st.stop()
                 
-            # --- VALIDACIÓN: LÍMITE DE MINUTOS (120 min para No-VIP) ---
             if not es_vip and minutos_consumidos >= 120:
-                st.error("❌ Has agotado tus 120 minutos de procesamiento gratuito.")
-                st.info("💡 Hazte VIP para obtener renderizado ilimitado sin restricciones de tiempo.")
+                st.error("❌ Has agotado tus 120 minutos gratuitos.")
                 st.stop()
 
             tarea_id = f"suite_{uuid.uuid4().hex[:12]}"
@@ -155,11 +143,10 @@ with col_der:
                 )
                 
                 if resultado.get("status") == "success":
-                    status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
+                    status.update(label="✨ ¡Procesamiento completado!", state="complete", expanded=False)
                     st.session_state.resultado_lote = resultado
-                    
                     if not es_vip:
-                        st.session_state.subbase_usuarios[email_usuario]["minutos_usados"] += 5
+                        st.session_state.minutos_usados += 5
                 else:
                     status.update(label="❌ Error crítico en el pipeline", state="error")
                     st.error(resultado.get("mensaje"))
@@ -169,33 +156,18 @@ with col_der:
         tid = st.session_state.tarea_id
         dir_tarea = os.path.join("storage", tid)
         
-        st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos con alta probabilidad viral:**")
-        
-        nombres_pestanas = [f"Clip {i+1} ({c['score']}%)" for i, c in enumerate(res["clips"])]
-        pestanas = st.tabs(nombres_pestanas)
+        st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos:**")
+        pestanas = st.tabs([f"Clip {i+1} ({c['score']}%)" for i, c in enumerate(res["clips"])])
         
         for idx, c in enumerate(res["clips"]):
             with pestanas[idx]:
                 st.markdown("<div class='clip-card'>", unsafe_allow_html=True)
                 st.metric(label="Score de Virabilidad Potencial", value=f"{c['score']}%")
                 
-                st.write("**Reporte de Indexación:**")
-                for r in c["reporte"]:
-                    st.write(f"- {r}")
-                
                 ruta_video = os.path.join(dir_tarea, c["archivo"])
                 if os.path.exists(ruta_video):
                     with open(ruta_video, "rb") as vf:
                         st.video(vf.read())
-                    
                     with open(ruta_video, "rb") as vf:
-                        st.download_button(
-                            label=f"📥 Descargar Clip {idx + 1}",
-                            data=vf,
-                            file_name=c["archivo"],
-                            mime="video/mp4",
-                            key=f"dl_{idx}"
-                        )
-                else:
-                    st.error("No se pudo localizar el archivo físico de este fragmento.")
+                        st.download_button(label=f"📥 Descargar Clip {idx + 1}", data=vf, file_name=c["archivo"], mime="video/mp4", key=f"dl_{idx}")
                 st.markdown("</div>", unsafe_allow_html=True)
