@@ -15,7 +15,11 @@ from supabase import create_client, Client
 
 # Asegurar importación limpia del módulo local tasks.py
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
+try:
+    from tasks import garantizar_entorno_tarea, pipeline_procesamiento_masivo
+except ImportError as e:
+    st.error(f"❌ Error al importar módulos en las tareas: {e}")
+    st.stop()
 
 cookie_controller = CookieController()
 
@@ -136,58 +140,63 @@ with col_der:
                     buffer.write(video_subido.getvalue())
                                 
             with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips...", expanded=True) as status:
-                resultado = pipeline_procesamiento_masivo(
-                    tarea_id=tarea_id, 
-                    ruta_video_master=ruta_input, 
-                    formato=formato,
-                    con_subtitulos=con_sub, 
-                    color_sub_hex="#deff9a", 
-                    estilo_subtitulos=plantilla, 
-                    url_remoto=url_remoto,
-                    diccionario_manual=diccionario_manual
-                )
+                try:
+                    resultado = pipeline_procesamiento_masivo(
+                        tarea_id=tarea_id, 
+                        ruta_video_master=ruta_input, 
+                        formato=formato,
+                        con_subtitulos=con_sub, 
+                        color_sub_hex="#deff9a", 
+                        estilo_subtitulos=plantilla, 
+                        url_remoto=url_remoto,
+                        diccionario_manual=diccionario_manual
+                    )
+                except Exception as ex:
+                    resultado = {"status": "error", "mensaje": f"Excepción interna detectada: {str(ex)}"}
                                 
-                if resultado.get("status") == "success":
+                if resultado and resultado.get("status") == "success":
                     status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
                     st.session_state.resultado_lote = resultado
                     if not es_vip and email_usuario not in ADMIN_EMAILS:
                         st.session_state.minutos_usados += 5
                 else:
                     status.update(label="❌ Error crítico en el pipeline", state="error")
-                    st.error(resultado.get("mensaje"))
+                    mensaje_err = resultado.get("mensaje") if resultado else "Error inesperado (retornó None)"
+                    st.error(mensaje_err)
 
     if "resultado_lote" in st.session_state and "tarea_id" in st.session_state:
         res = st.session_state.resultado_lote
         tid = st.session_state.tarea_id
         dir_tarea = os.path.join("storage", tid)
                 
-        st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos con alta probabilidad viral:**")
-                
-        nombres_pestanas = [f"Clip {i+1} ({c['score']})" for i, c in enumerate(res["clips"])]
-        pestanas = st.tabs(nombres_pestanas)
-                
-        for idx, c in enumerate(res["clips"]):
-            with pestanas[idx]:
-                st.markdown("<div class='clip-card'>", unsafe_allow_html=True)
-                st.metric(label="Score de Virabilidad Potencial", value=c["score"])
-                                
-                st.write("**Reporte de Indexación:**")
-                for r in c["reporte"]:
-                    st.write(f"- {r}")
-                                
-                ruta_video = os.path.join(dir_tarea, c["archivo"])
-                if os.path.exists(ruta_video):
-                    with open(ruta_video, "rb") as vf:
-                        st.video(vf.read())
-                                        
-                    with open(ruta_video, "rb") as vf:
-                        st.download_button(
-                            label=f"📥 Descargar Clip {idx + 1}",
-                            data=vf,
-                            file_name=c["archivo"],
-                            mime="video/mp4",
-                            key=f"dl_{idx}"
-                        )
-                else:
-                    st.error("No se pudo localizar el archivo físico de este fragmento.")
-                st.markdown("</div>", unsafe_allow_html=True)
+        if res and "clips" in res:
+            st.write(f"🎉 **Hemos descubierto e indexado {len(res['clips'])} fragmentos con alta probabilidad viral:**")
+                    
+            nombres_pestanas = [f"Clip {i+1} ({c['score']})" for i, c in enumerate(res["clips"])]
+            pestanas = st.tabs(nombres_pestanas)
+                    
+            for idx, c in enumerate(res["clips"]):
+                with pestanas[idx]:
+                    st.markdown("<div class='clip-card'>", unsafe_allow_html=True)
+                    st.metric(label="Score de Virabilidad Potencial", value=c["score"])
+                                    
+                    st.write("**Reporte de Indexación:**")
+                    for r in c["reporte"]:
+                        st.write(f"- {r}")
+                                    
+                    ruta_video = os.path.join(dir_tarea, c["archivo"])
+                    if os.path.exists(ruta_video):
+                        with open(ruta_video, "rb") as vf:
+                            st.video(vf.read())
+                                            
+                        with open(ruta_video, "rb") as vf:
+                            st.download_button(
+                                label=f"📥 Descargar Clip {idx + 1}",
+                                data=vf,
+                                file_name=c["archivo"],
+                                mime="video/mp4",
+                                key=f"dl_{idx}"
+                            )
+                    else:
+                        st.error("No se pudo localizar el archivo físico de este fragmento.")
+                    st.markdown("</div>", unsafe_allow_html=True)
