@@ -97,7 +97,6 @@ def analizar_rostros_predictive_vectorial(video_path: str, t_inicio: float, t_fi
     return {"data": lambda t: suavizados[min(int(t * (fps / 6)), len(suavizados) - 1)]}
 
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
-    # CORRECCIÓN: Si el video es más corto que la ventana estándar (20-30s), procesamos todo el video directamente
     if duracion_total < 20.0 or not segmentos_palabras:
         return [{"start": 0.0, "end": duracion_total, "score": 95, "reasons": ["Video corto adaptado al 100%."]}]
     
@@ -172,7 +171,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                 "BRUTAL CAMBIO AHORA", "INCREMENTA TU ÉXITO", "NUNCA ANTES VISTO"
             ]
             
-            # CORRECCIÓN: El paso de tiempo se ajusta para que no intente desbordar videos cortos
             intervalo = 2.0 if duracion_total < 20.0 else 3.0
             for i, t_seg in enumerate(np.arange(0.2, max(0.5, duracion_total - 1.0), intervalo)):
                 texto_frase = frases_ejemplo[i % len(frases_ejemplo)]
@@ -183,7 +181,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                     t_word_start = float(t_seg + (j * duracion_palabra))
                     t_word_end = float(t_word_start + duracion_palabra)
                     
-                    # Si la palabra excede la duración total real, no la añadimos
                     if t_word_start < duracion_total:
                         segmentos_palabras.append({
                             "start": t_word_start,
@@ -247,29 +244,3 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         txt_clip = (txt_clip
                                     .with_duration(duracion_sub)
                                     .with_start(w_start)
-                                    .with_position(('center', int(chunk.size[1] * 0.72))))
-                        
-                        def animar_subtitulo(image):
-                            return image
-                            
-                        txt_clip = txt_clip.image_transform(animar_subtitulo)
-                        componentes_chunk.append(txt_clip)
-            
-            video_final = CompositeVideoClip(componentes_chunk, duration=duracion_chunk)
-            nombre_archivo = f"clip_{idx + 1}_viral.mp4"
-            ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
-            
-            video_final.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
-            video_final.close()
-            
-            clips_processed.append({
-                "archivo": nombre_archivo,
-                "score": f"{plan['score']}%",
-                "reporte": plan["reasons"]
-            })
-            
-        clip_completo.close()
-        return {"status": "success", "clips": clips_processed}
-        
-    except Exception as err:
-        return {"status": "error", "mensaje": str(err)}
