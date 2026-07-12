@@ -2,6 +2,7 @@ import os
 import cv2
 import torch
 import yt_dlp
+import requests
 import numpy as np
 
 # Importación directa para MoviePy 2.0.0
@@ -17,6 +18,25 @@ EMOJI_DICTIONARY = {
 }
 
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
+
+def obtener_ruta_fuente_real() -> str:
+    """Descarga una fuente física TTF real y devuelve su ruta absoluta para Pillow/MoviePy."""
+    directorio_storage = os.path.abspath("storage")
+    os.makedirs(directorio_storage, exist_ok=True)
+    ruta_archivo_fuente = os.path.join(directorio_storage, "ImpactoViral.ttf")
+    
+    if not os.path.exists(ruta_archivo_fuente):
+        # Descarga una versión de Roboto Bold estable desde un CDN público seguro
+        url_fuente = "https://cdn.jsdelivr.net/fontsource/fonts/roboto@latest/files/roboto-latin-700-normal.ttf"
+        try:
+            respuesta = requests.get(url_fuente, timeout=15)
+            if respuesta.status_code == 200:
+                with open(ruta_archivo_fuente, "wb") as archivo:
+                    archivo.write(respuesta.content)
+        except Exception:
+            pass
+            
+    return ruta_archivo_fuente if os.path.exists(ruta_archivo_fuente) else ""
 
 def garantizar_entorno_tarea(tarea_id: str) -> str:
     ruta_tarea = os.path.join("storage", tarea_id)
@@ -129,6 +149,9 @@ def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_procesados = []
+    
+    # Resolver la ruta del archivo físico de fuente descargado en runtime
+    ruta_fuente_validada = obtener_ruta_fuente_real()
         
     try:
         if url_remoto and url_remoto.strip() != "":
@@ -193,13 +216,12 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # CORREGIDO: Se fuerza un alias string ("sans-serif") reconocido directamente 
-                        # por los motores de renderizado de fuentes fontconfig en sistemas Linux (Streamlit Cloud).
+                        # PASO CRÍTICO: Pasamos la ruta física exacta del archivo .ttf descargado.
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
-                            font="sans-serif",
+                            font=ruta_fuente_validada,
                             size=(chunk.size[0] - 40, None)
                         )
                         
