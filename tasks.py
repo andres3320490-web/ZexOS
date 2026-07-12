@@ -2,11 +2,11 @@ import os
 import cv2
 import torch
 import yt_dlp
+import requests
 import numpy as np
 
 # Importación directa para MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
-from PIL import Image, ImageDraw, ImageFont
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -19,33 +19,33 @@ EMOJI_DICTIONARY = {
 
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
 
-def obtener_ruta_fuente_falsa_sistema() -> str:
+def garantizar_fuente_fisica() -> str:
     """
-    Busca rutas típicas de fuentes Linux o genera un archivo .ttf 
-    físico mínimo en storage para asegurar que Pillow no falle.
+    Descarga una fuente TTF real directamente desde los servidores de Google Fonts
+    y devuelve la ruta absoluta del archivo para asegurar que Pillow pueda abrirlo.
     """
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
-    ruta_local = os.path.join(directorio_storage, "fuente_soporte.ttf")
+    ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
     
-    if os.path.exists(ruta_local):
-        return ruta_local
+    # Si el archivo ya existe y es válido (no está vacío), lo usamos directamente
+    if os.path.exists(ruta_fuente) and os.path.getsize(ruta_fuente) > 10000:
+        return ruta_fuente
 
-    # Lista de rutas físicas reales de fuentes por defecto en servidores Linux (Ubuntu/Debian)
-    rutas_comunes_linux = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
-    ]
+    # URL de descarga directa del binario TTF original de Google Fonts
+    url_fuente = "https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf"
     
-    for ruta in rutas_comunes_linux:
-        if os.path.exists(ruta):
-            return ruta
-
-    # Si el entorno está totalmente vacío de fuentes (muy raro), forzamos una 
-    # ruta del sistema que Pillow suele mapear de forma interna en su empaquetado binario
-    return "DejaVuSans"
+    try:
+        # Forzamos la descarga del flujo binario nativo
+        respuesta = requests.get(url_fuente, timeout=15, stream=True)
+        if respuesta.status_code == 200:
+            with open(ruta_fuente, "wb") as archivo:
+                for chunk in respuesta.iter_content(chunk_size=8192):
+                    archivo.write(chunk)
+    except Exception as e:
+        print(f"[Error de Descarga] No se pudo obtener la fuente remota: {e}")
+        
+    return ruta_fuente
 
 def garantizar_entorno_tarea(tarea_id: str) -> str:
     ruta_tarea = os.path.join("storage", tarea_id)
@@ -159,8 +159,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_procesados = []
     
-    # Conseguir la ruta de la fuente real del backend
-    fuente_final = obtener_ruta_fuente_falsa_sistema()
+    # Aseguramos la existencia del archivo físico .ttf local
+    ruta_fuente_absoluta = garantizar_fuente_fisica()
         
     try:
         if url_remoto and url_remoto.strip() != "":
@@ -225,12 +225,12 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         
                         color_actual = color_sub_hex if palabra_limpia in PALABRAS_RETENCION else "#FFFFFF"
                         
-                        # CORRECCIÓN FINAL: Pasamos obligatoriamente la ruta física de la fuente estándar de Linux
+                        # PASO CRÍTICO: Se pasa la ruta absoluta del string local .ttf válido
                         txt_clip = TextClip(
                             text=texto_final.upper(),
                             font_size=48 if estilo_subtitulos == "hormozi" else 36,
                             color=color_actual,
-                            font=fuente_final,
+                            font=ruta_fuente_absoluta,
                             size=(chunk.size[0] - 40, None)
                         )
                         
