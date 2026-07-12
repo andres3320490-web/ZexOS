@@ -140,7 +140,7 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
                 "end": float(w["end"]),
                 "text": str(w["word"]).strip()
             })
-    return segments_palabras
+    return segmentos_palabras
 
 def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
     cap = cv2.VideoCapture(video_path)
@@ -257,7 +257,7 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
     
     for i in range(0, len(palabras_filtradas), max_palabras):
         grupo = palabras_filtradas[i:i + max_palabras]
-        if not grupo: continue
+        if not group: continue
         bloques.append({
             "start": float(grupo[0]["start"]),
             "end": float(grupo[-1]["end"]),
@@ -281,6 +281,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         clip_completo = VideoFileClip(ruta_video_master)
         duracion_total = float(clip_completo.duration)
             
+        # --- SOLUCCIÓN AQUÍ: Inicializar siempre la variable antes del condicional ---
         segmentos_palabras = []
         if con_subtitulos:
             segmentos_palabras = transcribir_video_por_palabras(ruta_video_master)
@@ -290,7 +291,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = float(plan["start"]), float(plan["end"])
             
-            # --- CORRECCIÓN CLAVE MOVIEPY v2.0 ---
             chunk = clip_completo.slice(t_ini, t_fin)
             duracion_chunk = float(chunk.duration)
             
