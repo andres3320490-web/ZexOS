@@ -241,7 +241,7 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
     
     for i in range(0, len(palabras_filtradas), max_palabras):
         grupo = palabras_filtradas[i:i + max_palabras]
-        if not group: continue
+        if not grupo: continue
         bloques.append({
             "start": grupo[0]["start"],
             "end": grupo[-1]["end"],
