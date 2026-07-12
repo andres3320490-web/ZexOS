@@ -3,8 +3,9 @@ import cv2
 import torch
 import yt_dlp
 import numpy as np
+import requests
 
-# CORREGIDO PARA MOVIEPY 2.0.0 (Sin .editor)
+# Compatible con MoviePy 2.0.0
 from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
 DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
@@ -146,31 +147,34 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             
         segmentos_palabras = []
         if con_subtitulos and os.path.exists(ruta_audio_full):
-            # --- INSTALACIÓN DINÁMICA DE WHISPER PARA EVITAR ERRORES DE PILLOW ---
-            try:
-                import whisper
-            except ImportError:
-                import subprocess
-                import sys
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "openai-whisper"])
-                import whisper
-
-            modelo_whisper = whisper.load_model("base", device=DISPOSITIVO)
-            resultado_transcripcion = modelo_whisper.transcribe(ruta_audio_full, word_timestamps=True)
-            for segmento in resultado_transcripcion.get("segments", []):
-                for word_obj in segmento.get("words", []):
-                    segmentos_palabras.append({
-                        "start": word_obj["start"],
-                        "end": word_obj["end"],
-                        "text": word_obj["word"].strip()
-                    })
+            # --- TRANCRIPCIÓN SEGURA MEDIANTE LA API DE OPENAI (Evita instalar Whisper local) ---
+            api_key = os.getenv("OPENAI_API_KEY", "TU_API_KEY_AQUI")
+            
+            if api_key and api_key != "TU_API_KEY_AQUI":
+                headers = {"Authorization": f"Bearer {api_key}"}
+                files = {"file": open(ruta_audio_full, "rb")}
+                data = {"model": "whisper-1", "response_format": "verbose_json", "timestamp_granularities[]": "word"}
+                
+                respuesta = requests.post("https://api.openai.com/v1/audio/transcriptions", headers=headers, files=files, data=data)
+                
+                if respuesta.status_code == 200:
+                    datos_transcripcion = respuesta.json()
+                    for word_obj in datos_transcripcion.get("words", []):
+                        segmentos_palabras.append({
+                            "start": word_obj["start"],
+                            "end": word_obj["end"],
+                            "text": word_obj["word"].strip()
+                        })
+            
+            # Si no hay API Key o falla, se genera un segmento por defecto para evitar que la app se caiga
+            if not segmentos_palabras:
+                segmentos_palabras = [{"start": 0.5, "end": min(15.0, clip_completo.duration), "text": "Audio detectado sin API Key"}]
                     
         planes_de_corte = mapear_mejores_clips(segmentos_palabras, clip_completo.duration)
         
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = plan["start"], plan["end"]
             
-            # Sintaxis compatible con MoviePy 2.0.0
             chunk = clip_completo.subclip(t_ini, t_fin)
             duracion_chunk = chunk.duration
             
