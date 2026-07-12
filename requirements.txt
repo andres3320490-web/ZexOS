@@ -1,11 +1,12 @@
 streamlit
+fastapi
+uvicorn
 requests
 supabase
 streamlit-cookies-controller
 numpy
 opencv-python-headless
---index-url https://download.pytorch.org/whl/cpu
-torch
-openai-whisper
-moviepy>=2.0.0
 yt-dlp
+openai-whisper
+moviepy==2.0.0
+torch
