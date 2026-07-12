@@ -88,26 +88,56 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
         t_ini, t_fin = p['start'], p['end']
         chunk = master.subclip(t_ini, t_fin)
         
-        # 1. AUTO-REENCUADRE (9:16)
-        if "9:16" in formato:
-            tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
-            w, h = chunk.size
-            tw = int(h * (9/16))
+        # --- 🛠️ MODULACIÓN DEL RASTREO VISUAL Y REPARACIÓN DE TIRONES ---
+        tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
+        w, h = chunk.size
+        tw = int(h * (9/16)) if "9:16" in formato else w
+        
+        # Almacenamiento de caché para reconstrucción de flujo óptico en videos trabados
+        cache_video = {"ultimo_t": -1.0, "ultimo_frame": None, "prev_gray": None}
+
+        def procesar_cuadro_avanzado(get_frame, t):
+            frame = get_frame(t)
+            h_f, w_f, _ = frame.shape
             
-            def reframe(get_frame, t):
-                frame = get_frame(t)
+            # --- ALGORITMO ANTI-TRABADO: Interpolación temporal adaptativa ---
+            gray_actual = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if cache_video["ultimo_frame"] is not None and cache_video["prev_gray"] is not None:
+                # Calculamos la diferencia matemática absoluta entre el cuadro anterior y el actual
+                diff = cv2.absdiff(gray_actual, cache_video["prev_gray"])
+                score_cambio = np.mean(diff)
+                
+                # Si el score es extremadamente bajo, significa que el video se "congeló" o dio un tirón
+                if score_cambio < 1.0 and t > cache_video["ultimo_t"]:
+                    # Calculamos flujo óptico denso para estimar hacia dónde se moverían los píxeles
+                    flujo = cv2.calcOpticalFlowFarneback(cache_video["prev_gray"], gray_actual, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+                    h_m, w_m = flujo.shape[:2]
+                    mapa_x, mapa_y = np.meshgrid(np.arange(w_m), np.arange(h_m))
+                    mapa_x = (mapa_x + flujo[..., 0] * 0.5).astype(np.float32)
+                    mapa_y = (mapa_y + flujo[..., 1] * 0.5).astype(np.float32)
+                    # Forzamos la creación de un fotograma intermedio interpolado para romper la trabada
+                    frame = cv2.remap(cache_video["ultimo_frame"], mapa_x, mapa_y, cv2.INTER_LINEAR)
+                    gray_actual = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            cache_video["ultimo_t"] = t
+            cache_video["ultimo_frame"] = frame.copy()
+            cache_video["prev_gray"] = gray_actual.copy()
+            
+            # --- AUTO-REENCUADRE (Aplicado tras la estabilización de fotogramas) ---
+            if "9:16" in formato:
                 idx = min(int(t * tracking['fps']), len(tracking['coordenadas'])-1)
                 cx = tracking['coordenadas'][idx]
                 x1 = max(0, min(w - tw, cx - (tw//2)))
                 return frame[:, x1:x1+tw]
-                
-            chunk = chunk.fl(reframe, keep_duration=True)
+            return frame
+            
+        chunk = chunk.fl(procesar_cuadro_avanzado, keep_duration=True)
 
         # 2. BARRA DE PROGRESO DINÁMICA
         def make_bar(get_frame, t):
             bar_w = int(chunk.size[0] * (t/chunk.duration))
             img = np.zeros((6, chunk.size[0], 3), dtype=np.uint8)
-            img[:, :max(2, bar_w)] = [222, 255, 154] # Color Neón #deff9a
+            img[:, :max(2, bar_w)] = [222, 255, 154]
             return img
             
         prog_bar = ColorClip(size=(chunk.size[0], 6), col=(0,0,0)).fl(make_bar, keep_duration=True).set_duration(chunk.duration).set_position(('left', 'bottom'))
