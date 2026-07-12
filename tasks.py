@@ -20,7 +20,7 @@ EMOJI_DICTIONARY = {
 PALABRAS_RETENCION = set(EMOJI_DICTIONARY.keys()) | {"jamás", "nunca", "hoy", "increíble", "truco", "revelado"}
 
 def garantizar_fuente_fisica() -> str:
-    """Descarga una fuente TTF real y devuelve la ruta absoluta del archivo para Pillow/MoviePy."""
+    """Descarga una fuente TTF real y devuelve la ruta absoluta del archivo."""
     directorio_storage = os.path.abspath("storage")
     os.makedirs(directorio_storage, exist_ok=True)
     ruta_fuente = os.path.join(directorio_storage, "fuente_subtitulos.ttf")
@@ -209,15 +209,24 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                         w_start = w_info["start"] - t_ini
                         w_end = w_info["end"] - t_ini
                         
-                        # Margen estricto para evitar rebasar los límites del video en milisegundos
-                        margen_seguridad = duracion_chunk - 0.05
+                        # LÍMITE ABSOLUTO: El video no puede leer más allá de duracion_chunk - 0.02
+                        techo_maximo = duracion_chunk - 0.02
                         
-                        if w_start >= margen_seguridad:
+                        # Si por redondeo el inicio ya está fuera, lo descartamos
+                        if w_start >= techo_maximo:
                             continue
                             
                         w_start = max(0.0, w_start)
-                        w_end = min(margen_seguridad, w_end)
-                        duracion_sub = max(0.1, w_end - w_start)
+                        w_end = min(techo_maximo, w_end)
+                        
+                        # Calculamos la duración base
+                        duracion_sub = max(0.05, w_end - w_start)
+                        
+                        # CORRECCIÓN MATEMÁTICA ANTI-CRASH:
+                        # Si el tiempo final calculado (w_start + duracion_sub) excede el techo del video,
+                        # reducimos el tiempo de inicio hacia atrás para asegurar que el bloque quepa perfectamente.
+                        if (w_start + duracion_sub) > techo_maximo:
+                            w_start = max(0.0, techo_maximo - duracion_sub)
                         
                         word_raw = w_info["text"].strip()
                         palabra_limpia = word_raw.lower().strip(".,¡!¿?")
@@ -234,7 +243,6 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                             size=(chunk.size[0] - 40, None)
                         )
                         
-                        # Sintaxis fluida adaptada a MoviePy 2.0.0
                         txt_clip = (txt_clip
                                     .with_duration(duracion_sub)
                                     .with_start(w_start)
