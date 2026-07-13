@@ -34,11 +34,8 @@ SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
 @st.cache_resource
 def init_supabase():
-    return create_client(
-        SUPABASE_URL, 
-        SUPABASE_KEY,
-        options=st.get_option("server.enableCORS")
-    )
+    # Inicialización limpia y directa para resolver de raíz el AttributeError: 'bool' object has no attribute 'headers'
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase: Client = init_supabase()
 
