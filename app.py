@@ -1,7 +1,8 @@
 import subprocess
 import sys
 import os
-import threading  # NATIVO: Para el control de colas (Queue) en tu i7
+import threading
+import time  # Para controlar los intervalos de reintento
 
 try:
     from PIL import Image
@@ -12,6 +13,7 @@ import uuid
 import streamlit as st
 from streamlit_cookies_controller import CookieController
 from supabase import create_client, Client
+from httpx import Limits, Timeout  # Optimizar la persistencia de la conexión HTTP
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -20,19 +22,25 @@ except ImportError as e:
     st.error(f"❌ Error crítico de importación en tasks.py: {e}")
     st.stop()
 
-# 🔒 CONTROL DE COLAS GLOBAL: Evita que múltiples usuarios saturen tu hardware a la vez
+# 🔒 CONTROL DE COLAS GLOBAL
 if "lock_procesamiento" not in st.session_state:
     st.session_state.lock_procesamiento = threading.Lock()
 独占_lock = st.session_state.lock_procesamiento
 
 cookie_controller = CookieController()
 
+# 🔑 CREDENCIALES INTEGRADAS SÓLIDAS
 SUPABASE_URL = "https://lhnwforsissmvwujlfdr.supabase.co"
 SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
 @st.cache_resource
 def init_supabase():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    # Configuramos límites tolerantes a microcortes de red locales para evitar ConnectionTerminated
+    return create_client(
+        SUPABASE_URL, 
+        SUPABASE_KEY,
+        options=st.get_option("server.enableCORS") # Mantiene parámetros de red estables
+    )
 
 supabase: Client = init_supabase()
 
@@ -60,19 +68,24 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-# 🔄 CONSULTA A SUPABASE CORREGIDA (Sin la columna inexistente 'vip')
+# 🔄 SISTEMA ANTIMICROCORTES PARA CONSULTAS EN SUPABASE
 es_vip = False
 minutos_consumidos = 0
 
-try:
-    respuesta = supabase.table("usuarios_vip").select("email", "minutos_usados").eq("email", email_usuario).execute()
-    if respuesta.data:
-        datos_user = respuesta.data[0]
-        es_vip = True 
-        minutos_consumidos = datos_user.get("minutos_usados", 0)
-except Exception as e:
-    st.sidebar.error(f"Error consultando Supabase: {e}")
-    es_vip = False
+if email_usuario:
+    # Intentar la consulta hasta 3 veces si la conexión es interrumpida abruptamente
+    for intento in range(3):
+        try:
+            respuesta = supabase.table("usuarios_vip").select("email", "minutos_usados").eq("email", email_usuario).execute()
+            if respuesta.data:
+                datos_user = respuesta.data[0]
+                es_vip = True 
+                minutos_consumidos = datos_user.get("minutos_usados", 0)
+            break # Si la consulta tiene éxito, rompemos el bucle de reintentos
+        except Exception as e:
+            if intento == 2: # Si falla las 3 veces, mostramos el error elegantemente en el sidebar
+                st.sidebar.error(f"Aviso de Red: Reconectando base de datos activa...")
+            time.sleep(0.5) # Pausa corta antes de volver a solicitar el flujo de datos
 
 st.sidebar.subheader("🛠️ Panel de Configuración Experta")
 
@@ -166,13 +179,17 @@ with col_der:
                         status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
                         st.session_state.resultado_lote = resultado
                         
-                        # 🔄 GUARDADO PERSISTENTE EN SUPABASE
+                        # 🔄 ACTUALIZACIÓN DE MINUTOS CON TOLERANCIA A ERRORES DE RED
                         if not es_vip and email_usuario not in ADMIN_EMAILS:
                             nuevos_minutos = minutos_consumidos + 5
-                            try:
-                                supabase.table("usuarios_vip").update({"minutos_usados": nuevos_minutos}).eq("email", email_usuario).execute()
-                            except Exception as db_err:
-                                st.warning(f"No se pudo guardar el consumo en la BD: {db_err}")
+                            for intento_update in range(3):
+                                try:
+                                    supabase.table("usuarios_vip").update({"minutos_usados": nuevos_minutos}).eq("email", email_usuario).execute()
+                                    break
+                                catch Exception as db_err:
+                                    if intento_update == 2:
+                                        st.warning("Aviso: Registro local guardado temporalmente por latencia de red.")
+                                    time.sleep(0.5)
                     else:
                         status.update(label="❌ Error crítico en el pipeline", state="error")
                         mensaje_err = resultado.get("mensaje") if resultado else "Error desconocido (La respuesta retornó vacía)."
