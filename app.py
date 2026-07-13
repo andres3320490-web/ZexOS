@@ -67,11 +67,11 @@ st.sidebar.subheader("🛠️ Panel de Configuración Experta")
 
 if es_vip:
     st.sidebar.markdown('Tu Estado: <span class="vip-badge">👑 VIP PREMIUM</span>', unsafe_allow_html=True)
-    st.sidebar.caption("⚡ Almacenamiento en Hugging Face: Máximo 4GB habilitado.")
+    st.sidebar.caption("⚡ Almacenamiento en Servidor Local: Máximo 6GB habilitado.")
     st.sidebar.caption("⏱️ Tiempo de procesamiento: Infinito.")
 else:
     st.sidebar.markdown('Tu Estado: <span class="free-badge">👤 NO-VIP (FREE)</span>', unsafe_allow_html=True)
-    st.sidebar.caption("⚠️ Almacenamiento en Hugging Face: Limitado a 2GB (4GB VIP).")
+    st.sidebar.caption("⚠️ Almacenamiento en Servidor Local: Limitado a 2GB (4GB VIP).")
     st.sidebar.caption(f"⏱️ Minutos Disponibles: {120 - minutos_consumidos} de 120 min.")
     
     st.sidebar.markdown("---")
@@ -81,7 +81,7 @@ else:
     st.sidebar.caption("Envía el comprobante para activación inmediata.")
     st.sidebar.markdown("---")
 
-formato = st.sidebar.selectbox("Geometría del Cuadro", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
+formato_seleccionado = st.sidebar.selectbox("Geometría del Cuadro", options=["Short Vertical (9:16)", "Cinema Traditional (16:9)"])
 plantilla = st.sidebar.selectbox("Diseño de Rótulos", options=["hormozi", "classic_three"])
 con_sub = st.sidebar.checkbox("Activar Subtitulado Inteligente", value=True)
 diccionario_manual = st.sidebar.text_area("Keywords de Alta Retención Temática:", placeholder="brutal, impactante")
@@ -124,22 +124,28 @@ with col_der:
             st.session_state.tarea_id = tarea_id
             temp_dir = garantizar_entorno_tarea(tarea_id)
             ruta_input = ""
-                        
+                                
             if video_subido:
                 ruta_input = os.path.join(temp_dir, "video_subido.mp4")
                 with open(ruta_input, "wb") as buffer:
                     buffer.write(video_subido.getvalue())
-                                
-            with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips...", expanded=True) as status:
+                                        
+            with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips en servidor local...", expanded=True) as status:
                 try:
+                    # Adaptación exacta al backend optimizado de tasks.py
                     resultado = pipeline_procesamiento_masivo(
-                        tarea_id=tarea_id, ruta_video_master=ruta_input, formato=formato,
-                        con_subtitulos=con_sub, color_sub_hex="#deff9a", estilo_subtitulos=plantilla, 
-                        url_remoto=url_remoto, diccionario_manual=diccionario_manual
+                        tarea_id=tarea_id, 
+                        ruta_video_master=ruta_input, 
+                        formato=formato_seleccionado, # Envía el string seleccionado directamente
+                        con_subtitulos=con_sub, 
+                        color_sub_hex="#deff9a", 
+                        estilo_subtitulos=plantilla, 
+                        url_remoto=url_remoto, 
+                        diccionario_manual=diccionario_manual
                     )
                 except Exception as ex:
                     resultado = {"status": "error", "mensaje": f"Excepción crítica controlada: {str(ex)}"}
-                                
+                                        
                 if resultado and resultado.get("status") == "success":
                     status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
                     st.session_state.resultado_lote = resultado
@@ -167,7 +173,7 @@ with col_der:
                     st.write("**Reporte de Indexación:**")
                     for r in c["reporte"]:
                         st.write(f"- {r}")
-                                    
+                                            
                     ruta_video = os.path.join(dir_tarea, c["archivo"])
                     if os.path.exists(ruta_video):
                         with open(ruta_video, "rb") as vf:
@@ -178,5 +184,5 @@ with col_der:
                                 file_name=c["archivo"], mime="video/mp4", key=f"dl_{idx}"
                             )
                     else:
-                        st.error("No se pudo localizar el archivo físico.")
+                        st.error("No se pudo localizar el archivo físico en el almacenamiento local.")
                     st.markdown("</div>", unsafe_allow_html=True)
