@@ -5,15 +5,22 @@ import requests
 import shutil
 
 # ==============================================================================
-# 🚀 PARCHE DE ENTORNO ULTRA-SEGURO: FFmpeg Nativo Anticrash
+# 🚀 PARCHE DE ENTORNO ULTRA-SEGURO: FFmpeg Nativo para Streamlit Cloud
 # ==============================================================================
 def configurar_ffmpeg_nativo():
-    """Configura las variables de entorno usando el FFmpeg estable del sistema Docker/Colab/HuggingFace."""
-    ruta_binario = "/usr/bin/ffmpeg"
-    if not os.path.exists(ruta_binario):
-        ruta_buscada = shutil.which("ffmpeg")
-        if ruta_buscada:
-            ruta_binario = ruta_buscada
+    """Configura las variables de entorno buscando FFmpeg de forma dinámica en Streamlit Cloud."""
+    ruta_buscada = shutil.which("ffmpeg")
+    
+    if ruta_buscada:
+        ruta_binario = ruta_buscada
+    else:
+        rutas_alternativas = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
+        ruta_binario = "/usr/bin/ffmpeg"
+        for ruta in rutas_alternativas:
+            if os.path.exists(ruta):
+                ruta_binario = ruta
+                break
+                
     os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
     dir_binario = os.path.dirname(ruta_binario)
     if dir_binario not in os.environ["PATH"]:
@@ -78,10 +85,6 @@ def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
         return ydl.prepare_filename(info)
 
 def descargar_modelo_whisper_directo(tipo_modelo="tiny"):
-    """
-    Descarga el modelo 'tiny' optimizado para producción en entornos SaaS gratuitos.
-    Evita que Hugging Face detenga el contenedor por exceso de RAM.
-    """
     urls_openai = {
         "tiny": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf779f1bc05673c1d6e34246bb4824feb690f6f00a83e3a1e6ec/tiny.pt"
     }
@@ -104,7 +107,6 @@ def descargar_modelo_whisper_directo(tipo_modelo="tiny"):
 
 def transcribir_video_por_palabras(ruta_video: str) -> list:
     try:
-        # Usamos 'tiny' forzado en CPU para garantizar máxima estabilidad sin fugas de RAM
         modelo_path = descargar_modelo_whisper_directo("tiny")
         modelo = whisper.load_model(modelo_path, device="cpu")
         resultado = modelo.transcribe(ruta_video, language="es", word_timestamps=True, fp16=False)
