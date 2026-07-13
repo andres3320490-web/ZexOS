@@ -176,7 +176,7 @@ with col_der:
                         status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
                         st.session_state.resultado_lote = resultado
                         
-                        # 🔄 ACTUALIZACIÓN DE MINUTOS CON TOLERANCIA A ERRORES DE RED (Corregido 'except')
+                        # 🔄 ACTUALIZACIÓN DE MINUTOS CON TOLERANCIA A ERRORES DE RED
                         if not es_vip and email_usuario not in ADMIN_EMAILS:
                             nuevos_minutos = minutos_consumidos + 5
                             for intento_update in range(3):
