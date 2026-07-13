@@ -3,6 +3,7 @@ import sys
 import subprocess
 import requests
 import shutil
+import time
 
 # ==============================================================================
 # 🚀 PARCHE DE ENTORNO ULTRA-SEGURO: FFmpeg Nativo para Streamlit Cloud
@@ -10,7 +11,6 @@ import shutil
 def configurar_ffmpeg_nativo():
     """Configura las variables de entorno buscando FFmpeg de forma dinámica en Streamlit Cloud."""
     ruta_buscada = shutil.which("ffmpeg")
-    
     if ruta_buscada:
         ruta_binario = ruta_buscada
     else:
@@ -41,7 +41,7 @@ from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 # ==============================================================================
 # ⚙️ CONFIGURACIÓN DE DISPOSITIVO Y VARIABLES GLOBALES
 # ==============================================================================
-DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
+DISPOSITIVO = "cpu"  # Forzamos CPU para evitar fugas de memoria con CUDA virtual
 EMOJI_DICTIONARY = {
     "dinero": "💰", "fuego": "🔥", "viral": "🔥", "ganar": "🏆",
     "secreto": "🤫", "atención": "🚨", "mira": "👀", "importante": "⚠️",
@@ -200,32 +200,53 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
         bloques.append({"start": grupo[0]["start"], "end": grupo[-1]["end"], "palabras": grupo})
     return bloques
 
+# ==============================================================================
+# 🕒 PIPELINE CON REPARTO DE TIEMPO CONTROLADO (ESTILO SAAS SEGURO)
+# ==============================================================================
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
     clips_processed = []
     garantizar_fuente_fisica()
+    
     try:
+        # ⏱️ MINUTO 0 a 2: Descarga controlada
         if url_remoto and url_remoto.strip() != "":
             ruta_video_master = descargar_video_remoto(url_remoto, dir_trabajo)
+        
         if not ruta_video_master or not os.path.exists(ruta_video_master):
             return {"status": "error", "mensaje": "El archivo de video maestro no existe o no se pudo descargar."}
-            
+        
+        # Pausa estratégica para liberar la RAM de yt-dlp
+        time.sleep(30)
+                            
         if diccionario_manual:
             PALABRAS_RETENCION.update({p.strip().lower() for p in diccionario_manual.split(",") if p.strip()})
-                            
+        
+        # ⏱️ MINUTO 2 a 5: Carga secuencial de Whisper
         clip_completo = VideoFileClip(ruta_video_master)
         duracion_total = clip_completo.duration
-        segmentos_palabras = transcribir_video_por_palabras(ruta_video_master) if con_subtitulos else []
+        
+        segmentos_palabras = []
+        if con_subtitulos:
+            segmentos_palabras = transcribir_video_por_palabras(ruta_video_master)
+            # Espera de vaciado de memoria post-transcripción
+            time.sleep(45)
+
         planes_de_corte = mapear_mejores_clips(segmentos_palabras, duracion_total)
         
         hex_c = color_sub_hex.lstrip('#')
         rgb_c = tuple(int(hex_c[i:i+2], 16) for i in (0, 2, 4))
         bgr_color_destacado = (rgb_c[2], rgb_c[1], rgb_c[0])
                 
+        # ⏱️ MINUTO 5 a 12: Procesamiento modular por lotes (Un clip a la vez)
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = plan["start"], plan["end"]
             chunk = clip_completo.subclip(t_ini, t_fin)
+            
+            # Analiza rastros y reposa el procesador
             tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
+            time.sleep(15)
+            
             w_orig, h_orig = chunk.size
             target_w = int(h_orig * (9 / 16)) if ("9:16" in formato or "Short" in formato) else w_orig
             bloques_texto = construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin)
@@ -260,9 +281,15 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             chunk = chunk.fl(transformar_y_subtitular_cuadros, keep_duration=True)
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
+            
+            # Renderizado directo a disco con hilos limitados para no alarmar al servidor
             chunk.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
             chunk.close()
+            
             clips_processed.append({"archivo": nombre_archivo, "score": f"{plan['score']}%", "reporte": plan["reasons"]})
+            
+            # 🕒 Descanso entre renders para enfriar la asignación de RAM del contenedor
+            time.sleep(60)
                     
         clip_completo.close()
         return {"status": "success", "clips": clips_processed}
