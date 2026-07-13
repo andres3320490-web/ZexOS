@@ -8,36 +8,28 @@ import shutil
 # 🚀 PARCHE DE ENTORNO ULTRA-SEGURO: FFmpeg Nativo Anticrash
 # ==============================================================================
 def configurar_ffmpeg_nativo():
-    """Configura las variables de entorno usando el FFmpeg estable del sistema Docker."""
+    """Configura las variables de entorno usando el FFmpeg estable del sistema Docker/Colab/HuggingFace."""
     ruta_binario = "/usr/bin/ffmpeg"
-    
     if not os.path.exists(ruta_binario):
         ruta_buscada = shutil.which("ffmpeg")
         if ruta_buscada:
             ruta_binario = ruta_buscada
-
     os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
-    
     dir_binario = os.path.dirname(ruta_binario)
     if dir_binario not in os.environ["PATH"]:
         os.environ["PATH"] = dir_binario + os.pathsep + os.environ["PATH"]
-            
     return ruta_binario
 
 ruta_ffmpeg_activa = configurar_ffmpeg_nativo()
 
-try:
-    from moviepy.config import change_settings
-    change_settings({"FFMPEG_BINARY": ruta_ffmpeg_activa})
-except Exception as e:
-    print(f"Advertencia FFMPEG: {e}")
-
+# Importaciones absolutas y directas para evitar conflictos de versiones en MoviePy
 import cv2
 import torch
 import yt_dlp
 import numpy as np
 import whisper
 from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 
 # ==============================================================================
 # ⚙️ CONFIGURACIÓN DE DISPOSITIVO Y VARIABLES GLOBALES
@@ -85,17 +77,20 @@ def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
 
-def descargar_modelo_whisper_directo(tipo_modelo="base"):
+def descargar_modelo_whisper_directo(tipo_modelo="tiny"):
+    """
+    Descarga el modelo 'tiny' optimizado para producción en entornos SaaS gratuitos.
+    Evita que Hugging Face detenga el contenedor por exceso de RAM.
+    """
     urls_openai = {
-        "tiny": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf779f1bc05673c1d6e34246bb4824feb690f6f00a83e3a1e6ec/tiny.pt",
-        "base": "https://openaipublic.azureedge.net/main/whisper/models/ed441706eeac0471e65b24ac180941d769942d9c3a40e9d7729e2e43510db25a/base.pt"
+        "tiny": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf779f1bc05673c1d6e34246bb4824feb690f6f00a83e3a1e6ec/tiny.pt"
     }
     dir_modelos = os.path.expanduser("~/.cache/whisper")
     os.makedirs(dir_modelos, exist_ok=True)
     ruta_modelo = os.path.join(dir_modelos, f"{tipo_modelo}.pt")
-    if os.path.exists(ruta_modelo) and os.path.getsize(ruta_modelo) > 100000000:
+    if os.path.exists(ruta_modelo) and os.path.getsize(ruta_modelo) > 70000000:
         return ruta_modelo
-    url = urls_openai.get(tipo_modelo, urls_openai["base"])
+    url = urls_openai.get(tipo_modelo, urls_openai["tiny"])
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, stream=True, timeout=30)
         if r.status_code == 200:
@@ -109,8 +104,9 @@ def descargar_modelo_whisper_directo(tipo_modelo="base"):
 
 def transcribir_video_por_palabras(ruta_video: str) -> list:
     try:
-        modelo_path = descargar_modelo_whisper_directo("base")
-        modelo = whisper.load_model(modelo_path, device=DISPOSITIVO)
+        # Usamos 'tiny' forzado en CPU para garantizar máxima estabilidad sin fugas de RAM
+        modelo_path = descargar_modelo_whisper_directo("tiny")
+        modelo = whisper.load_model(modelo_path, device="cpu")
         resultado = modelo.transcribe(ruta_video, language="es", word_timestamps=True, fp16=False)
         
         segmentos_palabras = []
