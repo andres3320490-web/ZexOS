@@ -1,7 +1,7 @@
 import subprocess
 import sys
 import os
-import threading  # NATIVO: Para el control de colas
+import threading  # NATIVO: Para el control de colas (Queue) en tu i7
 
 try:
     from PIL import Image
@@ -20,7 +20,7 @@ except ImportError as e:
     st.error(f"❌ Error crítico de importación en tasks.py: {e}")
     st.stop()
 
-# 🔒 CONTROL DE COLAS GLOBAL: Solo un renderizado a la vez en tu i7
+# 🔒 CONTROL DE COLAS GLOBAL: Evita que múltiples usuarios saturen tu hardware a la vez
 if "lock_procesamiento" not in st.session_state:
     st.session_state.lock_procesamiento = threading.Lock()
 独占_lock = st.session_state.lock_procesamiento
@@ -36,6 +36,7 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
+# 🎨 INTERFAZ VISUAL ORIGINAL (INTACTA)
 st.markdown("""
     <style>
     .stApp { background-color: #05070a; color: #F1F5F9; }
@@ -59,16 +60,15 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-# 🔄 BASE DE DATOS: Traer estado VIP y minutos reales del usuario
+# 🔄 CONSULTA A SUPABASE CORREGIDA (Sin la columna inexistente 'vip')
 es_vip = False
 minutos_consumidos = 0
 
 try:
-    respuesta = supabase.table("usuarios_vip").select("email", "vip", "minutos_usados").eq("email", email_usuario).execute()
+    respuesta = supabase.table("usuarios_vip").select("email", "minutos_usados").eq("email", email_usuario).execute()
     if respuesta.data:
         datos_user = respuesta.data[0]
-        # Validamos si es VIP según tu columna (asumo que se llama 'vip' o por estar en la tabla)
-        es_vip = datos_user.get("vip", True) 
+        es_vip = True 
         minutos_consumidos = datos_user.get("minutos_usados", 0)
 except Exception as e:
     st.sidebar.error(f"Error consultando Supabase: {e}")
@@ -83,7 +83,7 @@ if es_vip:
 else:
     st.sidebar.markdown('Tu Estado: <span class="free-badge">👤 NO-VIP (FREE)</span>', unsafe_allow_html=True)
     st.sidebar.caption("⚠️ Almacenamiento en Servidor Local: Limitado a 2GB (4GB VIP).")
-    st.sidebar.caption(f"⏱️ Minutos Consumidos en BD: {minutos_consumidos} / 120 min.")
+    st.sidebar.caption(f"⏱️ Minutos Disponibles: {120 - minutos_consumidos} de 120 min.")
     
     st.sidebar.markdown("---")
     st.sidebar.write("🏆 **Mejora a VIP por solo $10/mes:**")
@@ -127,9 +127,8 @@ with col_der:
                 st.error(f"❌ El archivo excede el límite permitido ({limite_gb} GB).")
                 st.stop()
                 
-            # Restricción estricta leyendo los minutos reales de Supabase
             if not es_vip and email_usuario not in ADMIN_EMAILS and minutos_consumidos >= 120:
-                st.error("❌ Has agotado tus 120 minutos gratuitos en tu cuenta.")
+                st.error("❌ Has agotado tus 120 minutos gratuitos.")
                 st.stop()
 
             tarea_id = f"suite_{uuid.uuid4().hex[:12]}"
@@ -142,20 +141,18 @@ with col_der:
                 with open(ruta_input, "wb") as buffer:
                     buffer.write(video_subido.getvalue())
                                         
-            # ⏳ GESTIÓN DE FILA DE ESPERA (QUEUE LOCAL)
-            with st.status("⏳ Verificando disponibilidad del servidor local...", expanded=True) as status:
-                servidor_ocupado =独占_lock.locked()
-                if servidor_ocupado:
+            # ⏳ MANEJO DE FILA DE ESPERA INTERNA
+            with st.status("⏳ Verificando disponibilidad del clúster local...", expanded=True) as status:
+                if 独占_lock.locked():
                     status.update(label="⚠️ Servidor ocupado. Estás en fila de espera, no cierres la pestaña...", state="running")
                 
-                # Aquí el usuario espera hasta que el anterior termine de renderizar
                 with 独占_lock:
-                    status.update(label="🧠 Servidor adquirido. Extrayendo ganchos narrativos y procesando...", state="running")
+                    status.update(label="🧠 Servidor adquirido. Extrayendo ganchos narrativos...", state="running")
                     try:
                         resultado = pipeline_procesamiento_masivo(
                             tarea_id=tarea_id, 
                             ruta_video_master=ruta_input, 
-                            formato=formato_seleccionado, 
+                            formato=formato_seleccionado,
                             con_subtitulos=con_sub, 
                             color_sub_hex="#deff9a", 
                             estilo_subtitulos=plantilla, 
@@ -169,17 +166,16 @@ with col_der:
                         status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
                         st.session_state.resultado_lote = resultado
                         
-                        # 🔄 GUARDAR MINUTOS EN SUPABASE (PERSISTENTE)
+                        # 🔄 GUARDADO PERSISTENTE EN SUPABASE
                         if not es_vip and email_usuario not in ADMIN_EMAILS:
                             nuevos_minutos = minutos_consumidos + 5
                             try:
                                 supabase.table("usuarios_vip").update({"minutos_usados": nuevos_minutos}).eq("email", email_usuario).execute()
-                                st.success(f"⏱️ 5 minutos añadidos a tu cuenta en Base de Datos ({nuevos_minutos}/120).")
                             except Exception as db_err:
-                                st.warning(f"No se pudo actualizar los minutos en BD: {db_err}")
+                                st.warning(f"No se pudo guardar el consumo en la BD: {db_err}")
                     else:
                         status.update(label="❌ Error crítico en el pipeline", state="error")
-                        mensaje_err = resultado.get("mensaje") if resultado else "Error desconocido."
+                        mensaje_err = resultado.get("mensaje") if resultado else "Error desconocido (La respuesta retornó vacía)."
                         st.error(mensaje_err)
 
     if "resultado_lote" in st.session_state and "tarea_id" in st.session_state:
