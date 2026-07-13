@@ -7,6 +7,7 @@ import numpy as np
 import urllib.request
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from imageio_ffmpeg import get_ffmpeg_exe
 
 # Ajuste óptimo de hilos de ejecución concurrentes para tu i7 y 16GB de RAM
 HILOS_DISPONIBLES = min(4, multiprocessing.cpu_count())
@@ -35,7 +36,6 @@ FACE_CASCADE = cargar_clasificador_seguro('haarcascade_frontalface_default.xml')
 VTUBER_CASCADE = cargar_clasificador_seguro('haarcascade_upperbody.xml')
 
 def descargar_video_url(url, carpeta_salida):
-    """ Descarga real usando yt-dlp nativo directo al disco local """
     ruta_destino = os.path.join(carpeta_salida, "video_descargado.mp4")
     try:
         comando = [
@@ -48,7 +48,6 @@ def descargar_video_url(url, carpeta_salida):
         subprocess.run(comando, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return ruta_destino
     except Exception:
-        # Fallback alternativo rápido de descarga directa si el formato complejo falla
         try:
             comando_simple = ["yt-dlp", "-f", "mp4", "-o", ruta_destino, url]
             subprocess.run(comando_simple, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -158,6 +157,23 @@ def renderizar_rotulos_interactivos(frame, texto, centro_x, centro_y, resaltar=F
     cv2.putText(frame, texto, (pos_x, pos_y), font, scale, color_borde, grosor + 3, cv2.LINE_AA)
     cv2.putText(frame, texto, (pos_x, pos_y), font, scale, color_texto, grosor, cv2.LINE_AA)
 
+def convertir_a_h264_web(ruta_raw, ruta_final):
+    """ Convierte el archivo crudo de OpenCV en un formato MP4 con codec H.264 compatible con la web """
+    ffmpeg_exe = get_ffmpeg_exe()
+    comando = [
+        ffmpeg_exe, "-y",
+        "-i", ruta_raw,
+        "-vcodec", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-profile:v", "baseline",
+        "-level", "3.0",
+        "-an",
+        ruta_final
+    ]
+    subprocess.run(comando, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if os.path.exists(ruta_raw):
+        os.remove(ruta_raw)
+
 def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_subtitulos, estilo_subtitulos):
     cap = cv2.VideoCapture(ruta_input)
     if not cap.isOpened():
@@ -170,10 +186,8 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
     frame_inicio = int(inicio * fps)
     frame_fin = int(fin * fps)
     
-    # FORZADO DE GEOMETRÍA SHORT 9:16 VERTICAL NATIVA
     if "9:16" in formato or formato == "Short Vertical (9:16)":
         target_w = int(alto * (9 / 16))
-        # Asegurar que el ancho sea un número par para compatibilidad de codec h264
         if target_w % 2 != 0:
             target_w -= 1
         target_h = alto
@@ -184,8 +198,11 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
         mapa_centros_x = []
         
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_inicio)
+    
+    # Escribimos un archivo temporal intermedio
+    ruta_temp = ruta_output.replace(".mp4", "_raw.mp4")
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(ruta_output, fourcc, fps, (target_w, target_h))
+    out = cv2.VideoWriter(ruta_temp, fourcc, fps, (target_w, target_h))
     
     idx_frame = 0
     contador_frames = frame_inicio
@@ -200,7 +217,6 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
             centro_x = mapa_centros_x[min(idx_frame, len(mapa_centros_x) - 1)]
             izq = centro_x - (target_w // 2)
             der = izq + target_w
-            # Recorte estricto de matriz para no deformar ni estirar la imagen
             frame_procesado = frame[0:alto, izq:der]
         else:
             frame_procesado = frame
@@ -220,6 +236,14 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
         
     cap.release()
     out.release()
+    
+    # Conversión instantánea a codec H.264 compatible con navegadores web
+    try:
+        convertir_a_h264_web(ruta_temp, ruta_output)
+    except Exception:
+        if os.path.exists(ruta_temp):
+            os.rename(ruta_temp, ruta_output)
+            
     return True
 
 def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subtitulos, color_sub_hex, estilo_subtitulos, url_remoto=None, diccionario_manual=""):
@@ -228,7 +252,6 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
     
     ruta_procesar = ruta_video_master
     
-    # Descarga e integración en caliente si el usuario introduce un link de YouTube
     if url_remoto and url_remoto.strip():
         try:
             ruta_procesar = descargar_video_url(url_remoto.strip(), dir_tarea)
