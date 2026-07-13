@@ -124,44 +124,6 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
         print(f"Error en transcripción Whisper: {str(e)}")
         return []
 
-def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
-    cap = cv2.VideoCapture(video_path)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
-    ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
-    fotogramas_totales = int((t_fin - t_inicio) * fps)
-    centros_fotogramas = []
-    
-    for f_idx in range(fotogramas_totales):
-        ret, frame = cap.read()
-        if not ret: break
-        if f_idx % 4 == 0:
-            try:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                reducido = cv2.resize(gray, (0, 0), fx=0.25, fy=0.25)
-                sobely = cv2.Sobel(reducido, cv2.CV_64F, 0, 1, ksize=5)
-                abs_sobely = np.absolute(sobely)
-                scaled_sobel = np.uint8(255 * (abs_sobely / np.max(abs_sobely))) if np.max(abs_sobely) > 0 else reducido
-                column_sums = np.sum(scaled_sobel, axis=0)
-                centro_estimado = int(np.argmax(column_sums) * 4)
-                centros_fotogramas.append(centro_estimado if 0 < centro_estimado < ancho_orig else ancho_orig // 2)
-            except:
-                centros_fotogramas.append(ancho_orig // 2)
-        else:
-            centros_fotogramas.append(centros_fotogramas[-1] if centros_fotogramas else ancho_orig // 2)
-                
-    cap.release()
-    if not centros_fotogramas: centros_fotogramas = [ancho_orig // 2]
-    
-    suavizados = []
-    pos_actual = centros_fotogramas[0]
-    for pos_detectada in centros_fotogramas:
-        distancia = pos_detectada - pos_actual
-        factor_inercia = 0.50 if abs(distancia) > (ancho_orig // 4) else 0.12
-        pos_actual += int(distancia * factor_inercia)
-        suavizados.append(pos_actual)
-    return {"coordenadas": suavizados, "fps": fps}
-
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
     if duracion_total < 25.0 or not segmentos_palabras:
         return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración."]}]
@@ -201,7 +163,7 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
     return bloques
 
 # ==============================================================================
-# 🕒 PIPELINE CON REPARTO DE TIEMPO CONTROLADO (ESTILO SAAS SEGURO)
+# 🚀 PIPELINE DE BAJO CONSUMO (SIN OPENCV PARA EVITAR CAÍDAS DE RAM)
 # ==============================================================================
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
@@ -209,28 +171,22 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
     garantizar_fuente_fisica()
     
     try:
-        # ⏱️ MINUTO 0 a 2: Descarga controlada
         if url_remoto and url_remoto.strip() != "":
             ruta_video_master = descargar_video_remoto(url_remoto, dir_trabajo)
         
         if not ruta_video_master or not os.path.exists(ruta_video_master):
             return {"status": "error", "mensaje": "El archivo de video maestro no existe o no se pudo descargar."}
         
-        # Pausa estratégica para liberar la RAM de yt-dlp
-        time.sleep(30)
+        time.sleep(10)
                             
         if diccionario_manual:
             PALABRAS_RETENCION.update({p.strip().lower() for p in diccionario_manual.split(",") if p.strip()})
         
-        # ⏱️ MINUTO 2 a 5: Carga secuencial de Whisper
         clip_completo = VideoFileClip(ruta_video_master)
         duracion_total = clip_completo.duration
         
-        segmentos_palabras = []
-        if con_subtitulos:
-            segmentos_palabras = transcribir_video_por_palabras(ruta_video_master)
-            # Espera de vaciado de memoria post-transcripción
-            time.sleep(45)
+        segmentos_palabras = transcribir_video_por_palabras(ruta_video_master) if con_subtitulos else []
+        time.sleep(15)
 
         planes_de_corte = mapear_mejores_clips(segmentos_palabras, duracion_total)
         
@@ -238,26 +194,26 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         rgb_c = tuple(int(hex_c[i:i+2], 16) for i in (0, 2, 4))
         bgr_color_destacado = (rgb_c[2], rgb_c[1], rgb_c[0])
                 
-        # ⏱️ MINUTO 5 a 12: Procesamiento modular por lotes (Un clip a la vez)
         for idx, plan in enumerate(planes_de_corte):
             t_ini, t_fin = plan["start"], plan["end"]
             chunk = clip_completo.subclip(t_ini, t_fin)
             
-            # Analiza rastros y reposa el procesador
-            tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
-            time.sleep(15)
-            
             w_orig, h_orig = chunk.size
             target_w = int(h_orig * (9 / 16)) if ("9:16" in formato or "Short" in formato) else w_orig
+            # Recorte fijo al centro súper rápido y con consumo cero de memoria RAM
+            x_centro = (w_orig - target_w) // 2
+            
             bloques_texto = construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin)
 
             def transformar_y_subtitular_cuadros(get_frame, t):
-                frame = get_frame(t).copy()
+                frame = get_frame(t)
                 t_global = t_ini + t
+                
                 if "9:16" in formato or "Short" in formato:
-                    indice_f = min(int(t * tracking["fps"]), len(tracking["coordenadas"]) - 1)
-                    x1 = max(0, min(w_orig - target_w, tracking["coordenadas"][indice_f] - (target_w // 2)))
-                    frame = frame[:, x1:x1 + target_w].copy()
+                    frame = frame[:, x_centro:x_centro + target_w].copy()
+                else:
+                    frame = frame.copy()
+                    
                 if bloques_texto:
                     for bloque in bloques_texto:
                         if bloque["start"] <= t_global <= bloque["end"]:
@@ -268,11 +224,13 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
                                 if palabra_limpia in PALABRAS_RETENCION: contiene_gancho = True
                                 emoji = EMOJI_DICTIONARY.get(palabra_limpia, "")
                                 palabras_texto.append(f"{emoji}{word_raw}" if emoji else word_raw)
+                            
                             texto_bloque = " ".join(palabras_texto).upper()
                             fuente, escala, grosor = cv2.FONT_HERSHEY_DUPLEX, (1.2 if estilo_subtitulos == "hormozi" else 0.9), 3
                             color_texto = bgr_color_destacado if contiene_gancho else (255, 255, 255)
                             tam, _ = cv2.getTextSize(texto_bloque, fuente, escala, grosor)
                             tx, ty = (frame.shape[1] - tam[0]) // 2, int(frame.shape[0] * 0.72)
+                            
                             cv2.putText(frame, texto_bloque, (tx, ty), fuente, escala, (0, 0, 0), grosor + 4, cv2.LINE_AA)
                             cv2.putText(frame, texto_bloque, (tx, ty), fuente, escala, color_texto, grosor, cv2.LINE_AA)
                             break
@@ -282,14 +240,11 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
             
-            # Renderizado directo a disco con hilos limitados para no alarmar al servidor
             chunk.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
             chunk.close()
             
             clips_processed.append({"archivo": nombre_archivo, "score": f"{plan['score']}%", "reporte": plan["reasons"]})
-            
-            # 🕒 Descanso entre renders para enfriar la asignación de RAM del contenedor
-            time.sleep(60)
+            time.sleep(10)
                     
         clip_completo.close()
         return {"status": "success", "clips": clips_processed}
