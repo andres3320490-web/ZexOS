@@ -6,30 +6,31 @@ import shutil
 import time
 
 # ==============================================================================
-# 🚀 PARCHE DE ENTORNO ULTRA-SEGURO: FFmpeg Nativo para Streamlit Cloud
+# 🚀 DETECCIÓN NATIVA DE FFMPEG PARA SERVIDOR LOCAL (WINDOWS / MULTIPLATAFORMA)
 # ==============================================================================
-def configurar_ffmpeg_nativo():
-    """Configura las variables de entorno buscando FFmpeg de forma dinámica en Streamlit Cloud."""
+def configurar_ffmpeg_local():
+    """Detecta FFmpeg en las variables de entorno de la PC local o rutas comunes."""
     ruta_buscada = shutil.which("ffmpeg")
     if ruta_buscada:
-        ruta_binario = ruta_buscada
-    else:
-        rutas_alternativas = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
-        ruta_binario = "/usr/bin/ffmpeg"
-        for ruta in rutas_alternativas:
-            if os.path.exists(ruta):
-                ruta_binario = ruta
-                break
-                
-    os.environ["IMAGEIO_FFMPEG_EXE"] = ruta_binario
-    dir_binario = os.path.dirname(ruta_binario)
-    if dir_binario not in os.environ["PATH"]:
-        os.environ["PATH"] = dir_binario + os.pathsep + os.environ["PATH"]
-    return ruta_binario
+        return ruta_buscada
+    
+    # Rutas típicas de respaldo si no se configuró bien el Path en Windows
+    rutas_comunes_windows = [
+        r"C:\ffmpeg\bin\ffmpeg.exe",
+        r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+        os.path.abspath(os.path.join("ffmpeg", "bin", "ffmpeg.exe"))
+    ]
+    for ruta in rutas_comunes_windows:
+        if os.path.exists(ruta):
+            os.environ["IMAGEIO_FFMPEG_EXE"] = ruta
+            return ruta
+            
+    # Si encuentra el paquete de python por defecto
+    return "ffmpeg"
 
-ruta_ffmpeg_activa = configurar_ffmpeg_nativo()
+ruta_ffmpeg_activa = configurar_ffmpeg_local()
 
-# Importaciones absolutas y directas para evitar conflictos de versiones en MoviePy
+# Importaciones absolutas de alto rendimiento
 import cv2
 import torch
 import yt_dlp
@@ -39,9 +40,13 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 
 # ==============================================================================
-# ⚙️ CONFIGURACIÓN DE DISPOSITIVO Y VARIABLES GLOBALES
+# ⚙️ OPTIMIZACIÓN DE HARDWARE LOCAL (I7 + 16GB RAM)
 # ==============================================================================
-DISPOSITIVO = "cpu"  # Forzamos CPU para evitar fugas de memoria con CUDA virtual
+# Limitamos los hilos de PyTorch y OpenCV para no saturar el i7 y mantener la RAM bajo control
+torch.set_num_threads(4)
+cv2.setNumThreads(4)
+DISPOSITIVO = "cpu"  # Estable para procesar en paralelo sin saturar la gráfica integrada
+
 EMOJI_DICTIONARY = {
     "dinero": "💰", "fuego": "🔥", "viral": "🔥", "ganar": "🏆",
     "secreto": "🤫", "atención": "🚨", "mira": "👀", "importante": "⚠️",
@@ -84,16 +89,17 @@ def descargar_video_remoto(url: str, ruta_salida_dir: str) -> str:
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
 
-def descargar_modelo_whisper_directo(tipo_modelo="tiny"):
+def descargar_modelo_whisper_directo(tipo_modelo="base"):
+    # Subimos del modelo 'tiny' al modelo 'base' para mayor precisión de subtítulos en tu i7
     urls_openai = {
-        "tiny": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf779f1bc05673c1d6e34246bb4824feb690f6f00a83e3a1e6ec/tiny.pt"
+        "base": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf779f1bc05673c1d6e34246bb4824feb690f6f00a83e3a1e6ec/base.pt"
     }
     dir_modelos = os.path.expanduser("~/.cache/whisper")
     os.makedirs(dir_modelos, exist_ok=True)
     ruta_modelo = os.path.join(dir_modelos, f"{tipo_modelo}.pt")
-    if os.path.exists(ruta_modelo) and os.path.getsize(ruta_modelo) > 70000000:
+    if os.path.exists(ruta_modelo) and os.path.getsize(ruta_modelo) > 130000000:
         return ruta_modelo
-    url = urls_openai.get(tipo_modelo, urls_openai["tiny"])
+    url = urls_openai.get(tipo_modelo, "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf779f1bc05673c1d6e34246bb4824feb690f6f00a83e3a1e6ec/base.pt")
     try:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, stream=True, timeout=30)
         if r.status_code == 200:
@@ -107,7 +113,7 @@ def descargar_modelo_whisper_directo(tipo_modelo="tiny"):
 
 def transcribir_video_por_palabras(ruta_video: str) -> list:
     try:
-        modelo_path = descargar_modelo_whisper_directo("tiny")
+        modelo_path = descargar_modelo_whisper_directo("base")
         modelo = whisper.load_model(modelo_path, device="cpu")
         resultado = modelo.transcribe(ruta_video, language="es", word_timestamps=True, fp16=False)
         
@@ -124,11 +130,55 @@ def transcribir_video_por_palabras(ruta_video: str) -> list:
         print(f"Error en transcripción Whisper: {str(e)}")
         return []
 
+# ==============================================================================
+# 🔥 MEJORA DE RENDIMIENTO: AUTO-TRACKING INTELIGENTE POR DIAGONALES MÓVILES
+# ==============================================================================
+def analizar_rostros_multi_tracking(video_path: str, t_inicio: float, t_fin: float):
+    """Analiza los picos de acción y movimiento de píxeles para simular una cámara móvil inteligente."""
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    cap.set(cv2.CAP_PROP_POS_MSEC, t_inicio * 1000)
+    ancho_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
+    fotogramas_totales = int((t_fin - t_inicio) * fps)
+    centros_fotogramas = []
+    
+    # Procesamos inteligentemente saltando cuadros para ahorrar memoria RAM y CPU local
+    for f_idx in range(fotogramas_totales):
+        ret, frame = cap.read()
+        if not ret: break
+        if f_idx % 3 == 0:  # Muestreo optimizado cada 3 fotogramas
+            try:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                reducido = cv2.resize(gray, (0, 0), fx=0.20, fy=0.20)
+                sobely = cv2.Sobel(reducido, cv2.CV_64F, 0, 1, ksize=3)
+                abs_sobely = np.absolute(sobely)
+                scaled_sobel = np.uint8(255 * (abs_sobely / np.max(abs_sobely))) if np.max(abs_sobely) > 0 else reducido
+                column_sums = np.sum(scaled_sobel, axis=0)
+                centro_estimado = int(np.argmax(column_sums) * 5)
+                centros_fotogramas.append(centro_estimado if 0 < centro_estimado < ancho_orig else ancho_orig // 2)
+            except:
+                centros_fotogramas.append(ancho_orig // 2)
+        else:
+            centros_fotogramas.append(centros_fotogramas[-1] if centros_fotogramas else ancho_orig // 2)
+                
+    cap.release()
+    if not centros_fotogramas: centros_fotogramas = [ancho_orig // 2]
+    
+    # Filtro de suavizado (Inercia cinemática) para que la cámara se mueva de forma fluida y no brusca
+    suavizados = []
+    pos_actual = centros_fotogramas[0]
+    for pos_detectada in centros_fotogramas:
+        distancia = pos_detectada - pos_actual
+        factor_inercia = 0.30 if abs(distancia) > (ancho_orig // 4) else 0.08
+        pos_actual += int(distancia * factor_inercia)
+        suavizados.append(pos_actual)
+    return {"coordenadas": suavizados, "fps": fps}
+
 def mapear_mejores_clips(segmentos_palabras, duracion_total, max_clips=3):
     if duracion_total < 25.0 or not segmentos_palabras:
         return [{"start": 0.0, "end": duracion_total, "score": 98, "reasons": ["Ajuste inteligente al 100% de la duración."]}]
     ventanas = []
-    for inicio_bloque in np.arange(0, duracion_total - 15.0, 10.0):
+    for inicio_bloque in np.arange(0, duracion_total - 15.0, 8.0):
         fin_bloque = min(duracion_total, inicio_bloque + 30.0)
         palabras_bloque = [w for w in segmentos_palabras if inicio_bloque <= w["start"] <= fin_bloque]
         if len(palabras_bloque) < 5: continue
@@ -163,7 +213,7 @@ def construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin, max_p
     return bloques
 
 # ==============================================================================
-# 🚀 PIPELINE DE BAJO CONSUMO (SIN OPENCV PARA EVITAR CAÍDAS DE RAM)
+# 💎 PIPELINE PREMIUM CON AUTO-TRACKING MEJORADO DE BAJA LATENCIA
 # ==============================================================================
 def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato: str, con_subtitulos: bool, color_sub_hex: str = "#deff9a", estilo_subtitulos: str = "hormozi", url_remoto: str = "", diccionario_manual: str = "") -> dict:
     dir_trabajo = garantizar_entorno_tarea(tarea_id)
@@ -175,9 +225,7 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             ruta_video_master = descargar_video_remoto(url_remoto, dir_trabajo)
         
         if not ruta_video_master or not os.path.exists(ruta_video_master):
-            return {"status": "error", "mensaje": "El archivo de video maestro no existe o no se pudo descargar."}
-        
-        time.sleep(10)
+            return {"status": "error", "mensaje": "El archivo maestro de video no se encuentra."}
                             
         if diccionario_manual:
             PALABRAS_RETENCION.update({p.strip().lower() for p in diccionario_manual.split(",") if p.strip()})
@@ -185,9 +233,8 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
         clip_completo = VideoFileClip(ruta_video_master)
         duracion_total = clip_completo.duration
         
+        # Whisper Base se ejecuta localmente usando un hilo dedicado estable
         segmentos_palabras = transcribir_video_por_palabras(ruta_video_master) if con_subtitulos else []
-        time.sleep(15)
-
         planes_de_corte = mapear_mejores_clips(segmentos_palabras, duracion_total)
         
         hex_c = color_sub_hex.lstrip('#')
@@ -198,21 +245,22 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             t_ini, t_fin = plan["start"], plan["end"]
             chunk = clip_completo.subclip(t_ini, t_fin)
             
+            # 🔥 EJECUCIÓN DE SEGUIMIENTO DINÁMICO EN TU PC LOCAL (MÁXIMA CALIDAD 9:16)
+            tracking = analizar_rostros_multi_tracking(ruta_video_master, t_ini, t_fin)
+            
             w_orig, h_orig = chunk.size
             target_w = int(h_orig * (9 / 16)) if ("9:16" in formato or "Short" in formato) else w_orig
-            # Recorte fijo al centro súper rápido y con consumo cero de memoria RAM
-            x_centro = (w_orig - target_w) // 2
-            
             bloques_texto = construir_bloques_palabras_agrupadas(segmentos_palabras, t_ini, t_fin)
 
             def transformar_y_subtitular_cuadros(get_frame, t):
-                frame = get_frame(t)
+                frame = get_frame(t).copy()
                 t_global = t_ini + t
                 
+                # Renderiza la posición móvil calculada por el auto-tracking
                 if "9:16" in formato or "Short" in formato:
-                    frame = frame[:, x_centro:x_centro + target_w].copy()
-                else:
-                    frame = frame.copy()
+                    indice_f = min(int(t * tracking["fps"]), len(tracking["coordenadas"]) - 1)
+                    x1 = max(0, min(w_orig - target_w, tracking["coordenadas"][indice_f] - (target_w // 2)))
+                    frame = frame[:, x1:x1 + target_w].copy()
                     
                 if bloques_texto:
                     for bloque in bloques_texto:
@@ -240,13 +288,13 @@ def pipeline_procesamiento_masivo(tarea_id: str, ruta_video_master: str, formato
             nombre_archivo = f"clip_{idx + 1}_viral.mp4"
             ruta_salida_clip = os.path.join(dir_trabajo, nombre_archivo)
             
-            chunk.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', logger=None)
+            # Renderizado directo en tu disco duro optimizado para CPU multihilo
+            chunk.write_videofile(ruta_salida_clip, fps=30, codec='libx264', audio_codec='aac', threads=4, logger=None)
             chunk.close()
             
             clips_processed.append({"archivo": nombre_archivo, "score": f"{plan['score']}%", "reporte": plan["reasons"]})
-            time.sleep(10)
                     
         clip_completo.close()
         return {"status": "success", "clips": clips_processed}
     except Exception as err:
-        return {"status": "error", "mensaje": f"Fallo crítico en procesamiento: {str(err)}"}
+        return {"status": "error", "mensaje": f"Fallo crítico en procesamiento local: {str(err)}"}
