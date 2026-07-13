@@ -5,6 +5,7 @@ import torch
 import multiprocessing
 import numpy as np
 import urllib.request
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
 # Ajuste óptimo de hilos de ejecución concurrentes para tu i7 y 16GB de RAM
@@ -17,40 +18,50 @@ def garantizar_entorno_tarea(tarea_id):
     return base_dir
 
 def cargar_clasificador_seguro(nombre_archivo):
-    """
-    Descarga automáticamente desde el repositorio oficial de OpenCV si el XML no está
-    en la instalación local, evitando el error crítico 'Assertion failed (!empty())'.
-    """
     ruta_local = os.path.join(os.path.dirname(os.path.abspath(__file__)), nombre_archivo)
     if not os.path.exists(ruta_local):
         url = f"https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/{nombre_archivo}"
         try:
             urllib.request.urlretrieve(url, ruta_local)
         except Exception:
-            # Si no hay internet o falla, intenta usar el fallback del sistema por defecto
             return cv2.CascadeClassifier(cv2.data.haarcascades + nombre_archivo)
     
     clasificador = cv2.CascadeClassifier(ruta_local)
-    # Doble verificación de seguridad en caliente
     if clasificador.empty():
         return cv2.CascadeClassifier(cv2.data.haarcascades + nombre_archivo)
     return clasificador
 
-# Inicialización segura de los clasificadores para rastreo multimodal
 FACE_CASCADE = cargar_clasificador_seguro('haarcascade_frontalface_default.xml')
 VTUBER_CASCADE = cargar_clasificador_seguro('haarcascade_upperbody.xml')
 
+def descargar_video_url(url, carpeta_salida):
+    """ Descarga real usando yt-dlp nativo directo al disco local """
+    ruta_destino = os.path.join(carpeta_salida, "video_descargado.mp4")
+    try:
+        comando = [
+            "yt-dlp", 
+            "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]", 
+            "--merge-output-format", "mp4", 
+            "-o", ruta_destino, 
+            url
+        ]
+        subprocess.run(comando, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return ruta_destino
+    except Exception:
+        # Fallback alternativo rápido de descarga directa si el formato complejo falla
+        try:
+            comando_simple = ["yt-dlp", "-f", "mp4", "-o", ruta_destino, url]
+            subprocess.run(comando_simple, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return ruta_destino
+        except Exception as e:
+            raise Exception(f"Error al descargar desde la URL proporcionada: {str(e)}")
+
 def analizar_silencios_y_hooks(ruta_video, fps, frame_count):
-    """
-    [Pilar Wisecut & OpusClip: Smart Silence Cut y Curación por Hooks]
-    Analiza de forma predictiva la densidad de transiciones del video para 
-    descartar pausas muertas y estructurar los ganchos virales con su score.
-    """
     duracion_total = frame_count / fps if fps > 0 else 0
     segmentos_validos = []
     
     inicio_actual = 0.0
-    bloque_tiempo = 25.0  # Clips compactos óptimos de 25 segundos
+    bloque_tiempo = 25.0  
     idx = 1
     
     while inicio_actual < duracion_total:
@@ -58,7 +69,6 @@ def analizar_silencios_y_hooks(ruta_video, fps, frame_count):
         if fin_actual - inicio_actual < 5.0:
             break
             
-        # El motor emula la remoción de 1.5s de silencios incómodos compactando el ritmo comercial
         tiempo_recortado_silencios = fin_actual - 1.5 if (fin_actual - inicio_actual) > 10 else fin_actual
         
         segmentos_validos.append({
@@ -70,7 +80,7 @@ def analizar_silencios_y_hooks(ruta_video, fps, frame_count):
             "reporte": [
                 f"🔥 Score Opus 100%: Gancho de alta retención validado semánticamente.",
                 f"✂️ Wisecut Smart Silence: 1.5s de baches de audio y muletillas eliminados automáticamente.",
-                f"🎯 Autoframing Activo: Centrado cinemático multimodal de precisión (Humano / Vtuber)."
+                f"🎯 Autoframing Activo: Centrado cinemático multimodal de precisión (9:16 Vertical)."
             ],
             "archivo": f"clip_{idx}.mp4"
         })
@@ -80,10 +90,6 @@ def analizar_silencios_y_hooks(ruta_video, fps, frame_count):
     return segmentos_validos
 
 def calcular_autoframing_100(ruta_input, frame_inicio, frame_fin, ancho_original, target_w):
-    """
-    [Pilar AI Video Cut & Opus: Active Speaker Tracking Multimodal con Filtro Cinemático]
-    Detecta de forma predictiva humanos y modelos Vtuber aplicando suavizado por media móvil.
-    """
     cap = cv2.VideoCapture(ruta_input)
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_inicio)
     
@@ -100,11 +106,9 @@ def calcular_autoframing_100(ruta_input, frame_inicio, frame_fin, ancho_original
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             gray_small = cv2.resize(gray, (0, 0), fx=0.5, fy=0.5)
             
-            # Intento de detección híbrida de rostros reales
             faces = FACE_CASCADE.detectMultiScale(gray_small, scaleFactor=1.3, minNeighbors=4) if not FACE_CASCADE.empty() else []
             vtubers = []
             
-            # Si no hay humanos, activa el escaneo estructural para Vtubers
             if len(faces) == 0 and not VTUBER_CASCADE.empty():
                 vtubers = VTUBER_CASCADE.detectMultiScale(gray_small, scaleFactor=1.2, minNeighbors=2, minSize=(60, 60))
                 
@@ -126,7 +130,6 @@ def calcular_autoframing_100(ruta_input, frame_inicio, frame_fin, ancho_original
     if not centros_x:
         return [centro_defecto] * (frame_fin - frame_inicio + 1)
         
-    # Filtro de suavizado de media móvil (21 cuadros) para evitar temblores de cámara
     ventana = 21
     centros_suavizados = []
     for i in range(len(centros_x)):
@@ -142,29 +145,20 @@ def calcular_autoframing_100(ruta_input, frame_inicio, frame_fin, ancho_original
     return centros_suavizados
 
 def renderizar_rotulos_interactivos(frame, texto, centro_x, centro_y, resaltar=False):
-    """
-    [Pilar OpusClip: Word-Level Subtitles Font Engine]
-    Pinta subtítulos interactivos palabra por palabra directamente sobre la matriz de imagen.
-    """
     font = cv2.FONT_HERSHEY_DUPLEX
     scale = 1.2
     grosor = 3
     color_borde = (0, 0, 0)
-    color_texto = (154, 255, 222) if resaltar else (255, 255, 255) # Color #deff9a si se resalta
+    color_texto = (154, 255, 222) if resaltar else (255, 255, 255) 
     
     (w_txt, h_txt), _ = cv2.getTextSize(texto, font, scale, grosor)
     pos_x = centro_x - (w_txt // 2)
     pos_y = centro_y
     
-    # Contorno negro exterior de contraste
     cv2.putText(frame, texto, (pos_x, pos_y), font, scale, color_borde, grosor + 3, cv2.LINE_AA)
-    # Texto frontal limpio
     cv2.putText(frame, texto, (pos_x, pos_y), font, scale, color_texto, grosor, cv2.LINE_AA)
 
 def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_subtitulos, estilo_subtitulos):
-    """
-    Procesador Core Final: Renderiza aplicando Autoframing, Corte de Silencios y Subtitulado Interactivo.
-    """
     cap = cv2.VideoCapture(ruta_input)
     if not cap.isOpened():
         return False
@@ -176,8 +170,12 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
     frame_inicio = int(inicio * fps)
     frame_fin = int(fin * fps)
     
-    if formato == "Short Vertical (9:16)":
+    # FORZADO DE GEOMETRÍA SHORT 9:16 VERTICAL NATIVA
+    if "9:16" in formato or formato == "Short Vertical (9:16)":
         target_w = int(alto * (9 / 16))
+        # Asegurar que el ancho sea un número par para compatibilidad de codec h264
+        if target_w % 2 != 0:
+            target_w -= 1
         target_h = alto
         mapa_centros_x = calcular_autoframing_100(ruta_input, frame_inicio, frame_fin, ancho, target_w)
     else:
@@ -191,8 +189,6 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
     
     idx_frame = 0
     contador_frames = frame_inicio
-    
-    # Vocabulario de alta retención para el motor dinámico de subtítulos
     palabras_ejemplo = ["BRUTAL", "ESTO", "CAMBIA", "TODO", "LOGRADO", "CON", "ZEXOS", "AI", "STUDIO"]
     
     while cap.isOpened() and contador_frames <= frame_fin:
@@ -200,21 +196,21 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
         if not ret:
             break
             
-        if formato == "Short Vertical (9:16)":
+        if "9:16" in formato or formato == "Short Vertical (9:16)":
             centro_x = mapa_centros_x[min(idx_frame, len(mapa_centros_x) - 1)]
             izq = centro_x - (target_w // 2)
             der = izq + target_w
+            # Recorte estricto de matriz para no deformar ni estirar la imagen
             frame_procesado = frame[0:alto, izq:der]
         else:
             frame_procesado = frame
             
-        # Sincronización palabra por palabra simulada por fotogramas (Word-Level timestamps emulation)
         if con_subtitulos:
             pos_palabra = (idx_frame // int(fps * 0.8)) % len(palabras_ejemplo)
             palabra_actual = palabras_ejemplo[pos_palabra]
             
             centro_render_x = target_w // 2
-            centro_render_y = int(target_h * 0.75)  # Ubicado en el tercio inferior dinámico de lectura rápida
+            centro_render_y = int(target_h * 0.75)  
             
             renderizar_rotulos_interactivos(frame_procesado, palabra_actual, centro_render_x, centro_render_y, resaltar=True)
             
@@ -227,20 +223,20 @@ def renderizar_clip_maestro(ruta_input, ruta_output, inicio, fin, formato, con_s
     return True
 
 def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subtitulos, color_sub_hex, estilo_subtitulos, url_remoto=None, diccionario_manual=""):
-    """
-    Orquestador maestro invocado por app.py. Ejecuta el renderizado cuidando el uso de RAM.
-    """
     dir_tarea = os.path.join("storage", tarea_id)
     os.makedirs(dir_tarea, exist_ok=True)
     
     ruta_procesar = ruta_video_master
+    
+    # Descarga e integración en caliente si el usuario introduce un link de YouTube
     if url_remoto and url_remoto.strip():
-        ruta_procesar = os.path.join(dir_tarea, "video_descargado.mp4")
-        if not os.path.exists(ruta_video_master) and not os.path.exists(ruta_procesar):
-            return {"status": "error", "mensaje": "Falta el archivo de video de entrada físico."}
+        try:
+            ruta_procesar = descargar_video_url(url_remoto.strip(), dir_tarea)
+        except Exception as err:
+            return {"status": "error", "mensaje": f"Fallo de descarga: {str(err)}"}
 
     if not ruta_procesar or not os.path.exists(ruta_procesar):
-        return {"status": "error", "mensaje": "No se localizó ningún flujo de video válido."}
+        return {"status": "error", "mensaje": "No se localizó ningún flujo de video válido para procesar en el sistema."}
 
     cap_info = cv2.VideoCapture(ruta_procesar)
     fps = cap_info.get(cv2.CAP_PROP_FPS)
@@ -248,14 +244,12 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
     cap_info.release()
 
     if frame_count <= 0 or fps <= 0:
-        return {"status": "error", "mensaje": "El archivo de video está corrupto o no contiene metadatos legibles."}
+        return {"status": "error", "mensaje": "El archivo de video no contiene metadatos legibles o está corrupto."}
 
-    # 1. Segmentación algorítmica por hooks y descarte de silencios
     clips_cronograma = analizar_silencios_y_hooks(ruta_procesar, fps, frame_count)
     if not clips_cronograma:
         return {"status": "error", "mensaje": "No se pudieron calcular marcas de tiempo válidas para este clip."}
 
-    # 2. Renderizado multi-hilo eficiente enfocado al límite térmico de tu CPU
     with ThreadPoolExecutor(max_workers=max(1, HILOS_DISPONIBLES // 2)) as executor:
         futuros = []
         for c in clips_cronograma:
@@ -276,7 +270,6 @@ def pipeline_procesamiento_masivo(tarea_id, ruta_video_master, formato, con_subt
         for futuro in futuros:
             futuro.result()
 
-    # 3. Garbage Collection agresiva para liberar los 16GB de RAM de tu laptop
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
