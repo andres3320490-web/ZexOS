@@ -11,4 +11,4 @@ streamlit-cookies-controller
 requests
 supabase
 postgrest
-deprecat
+deprecate
