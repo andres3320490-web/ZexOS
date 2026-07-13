@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import os
+import threading  # NATIVO: Para el control de colas
 
 try:
     from PIL import Image
@@ -18,6 +19,11 @@ try:
 except ImportError as e:
     st.error(f"❌ Error crítico de importación en tasks.py: {e}")
     st.stop()
+
+# 🔒 CONTROL DE COLAS GLOBAL: Solo un renderizado a la vez en tu i7
+if "lock_procesamiento" not in st.session_state:
+    st.session_state.lock_procesamiento = threading.Lock()
+独占_lock = st.session_state.lock_procesamiento
 
 cookie_controller = CookieController()
 
@@ -53,15 +59,20 @@ if not email_usuario:
 
 cookie_controller.set("zexos_user_email", email_usuario)
 
-try:
-    respuesta = supabase.table("usuarios_vip").select("email").eq("email", email_usuario).execute()
-    es_vip = len(respuesta.data) > 0
-except Exception:
-    es_vip = False
+# 🔄 BASE DE DATOS: Traer estado VIP y minutos reales del usuario
+es_vip = False
+minutos_consumidos = 0
 
-if "minutos_usados" not in st.session_state:
-    st.session_state.minutos_usados = 0
-minutos_consumidos = st.session_state.minutos_usados
+try:
+    respuesta = supabase.table("usuarios_vip").select("email", "vip", "minutos_usados").eq("email", email_usuario).execute()
+    if respuesta.data:
+        datos_user = respuesta.data[0]
+        # Validamos si es VIP según tu columna (asumo que se llama 'vip' o por estar en la tabla)
+        es_vip = datos_user.get("vip", True) 
+        minutos_consumidos = datos_user.get("minutos_usados", 0)
+except Exception as e:
+    st.sidebar.error(f"Error consultando Supabase: {e}")
+    es_vip = False
 
 st.sidebar.subheader("🛠️ Panel de Configuración Experta")
 
@@ -72,7 +83,7 @@ if es_vip:
 else:
     st.sidebar.markdown('Tu Estado: <span class="free-badge">👤 NO-VIP (FREE)</span>', unsafe_allow_html=True)
     st.sidebar.caption("⚠️ Almacenamiento en Servidor Local: Limitado a 2GB (4GB VIP).")
-    st.sidebar.caption(f"⏱️ Minutos Disponibles: {120 - minutos_consumidos} de 120 min.")
+    st.sidebar.caption(f"⏱️ Minutos Consumidos en BD: {minutos_consumidos} / 120 min.")
     
     st.sidebar.markdown("---")
     st.sidebar.write("🏆 **Mejora a VIP por solo $10/mes:**")
@@ -116,8 +127,9 @@ with col_der:
                 st.error(f"❌ El archivo excede el límite permitido ({limite_gb} GB).")
                 st.stop()
                 
+            # Restricción estricta leyendo los minutos reales de Supabase
             if not es_vip and email_usuario not in ADMIN_EMAILS and minutos_consumidos >= 120:
-                st.error("❌ Has agotado tus 120 minutos gratuitos.")
+                st.error("❌ Has agotado tus 120 minutos gratuitos en tu cuenta.")
                 st.stop()
 
             tarea_id = f"suite_{uuid.uuid4().hex[:12]}"
@@ -130,31 +142,45 @@ with col_der:
                 with open(ruta_input, "wb") as buffer:
                     buffer.write(video_subido.getvalue())
                                         
-            with st.status("🧠 Extrayendo ganchos narrativos y mapeando clips en servidor local...", expanded=True) as status:
-                try:
-                    # Adaptación exacta al backend optimizado de tasks.py
-                    resultado = pipeline_procesamiento_masivo(
-                        tarea_id=tarea_id, 
-                        ruta_video_master=ruta_input, 
-                        formato=formato_seleccionado, # Envía el string seleccionado directamente
-                        con_subtitulos=con_sub, 
-                        color_sub_hex="#deff9a", 
-                        estilo_subtitulos=plantilla, 
-                        url_remoto=url_remoto, 
-                        diccionario_manual=diccionario_manual
-                    )
-                except Exception as ex:
-                    resultado = {"status": "error", "mensaje": f"Excepción crítica controlada: {str(ex)}"}
-                                        
-                if resultado and resultado.get("status") == "success":
-                    status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
-                    st.session_state.resultado_lote = resultado
-                    if not es_vip and email_usuario not in ADMIN_EMAILS:
-                        st.session_state.minutos_usados += 5
-                else:
-                    status.update(label="❌ Error crítico en el pipeline", state="error")
-                    mensaje_err = resultado.get("mensaje") if resultado else "Error desconocido (La respuesta retornó vacía)."
-                    st.error(mensaje_err)
+            # ⏳ GESTIÓN DE FILA DE ESPERA (QUEUE LOCAL)
+            with st.status("⏳ Verificando disponibilidad del servidor local...", expanded=True) as status:
+                servidor_ocupado =独占_lock.locked()
+                if servidor_ocupado:
+                    status.update(label="⚠️ Servidor ocupado. Estás en fila de espera, no cierres la pestaña...", state="running")
+                
+                # Aquí el usuario espera hasta que el anterior termine de renderizar
+                with 独占_lock:
+                    status.update(label="🧠 Servidor adquirido. Extrayendo ganchos narrativos y procesando...", state="running")
+                    try:
+                        resultado = pipeline_procesamiento_masivo(
+                            tarea_id=tarea_id, 
+                            ruta_video_master=ruta_input, 
+                            formato=formato_seleccionado, 
+                            con_subtitulos=con_sub, 
+                            color_sub_hex="#deff9a", 
+                            estilo_subtitulos=plantilla, 
+                            url_remoto=url_remoto, 
+                            diccionario_manual=diccionario_manual
+                        )
+                    except Exception as ex:
+                        resultado = {"status": "error", "mensaje": f"Excepción crítica controlada: {str(ex)}"}
+                                            
+                    if resultado and resultado.get("status") == "success":
+                        status.update(label="✨ ¡Procesamiento por lotes completado con éxito!", state="complete", expanded=False)
+                        st.session_state.resultado_lote = resultado
+                        
+                        # 🔄 GUARDAR MINUTOS EN SUPABASE (PERSISTENTE)
+                        if not es_vip and email_usuario not in ADMIN_EMAILS:
+                            nuevos_minutos = minutos_consumidos + 5
+                            try:
+                                supabase.table("usuarios_vip").update({"minutos_usados": nuevos_minutos}).eq("email", email_usuario).execute()
+                                st.success(f"⏱️ 5 minutos añadidos a tu cuenta en Base de Datos ({nuevos_minutos}/120).")
+                            except Exception as db_err:
+                                st.warning(f"No se pudo actualizar los minutos en BD: {db_err}")
+                    else:
+                        status.update(label="❌ Error crítico en el pipeline", state="error")
+                        mensaje_err = resultado.get("mensaje") if resultado else "Error desconocido."
+                        st.error(mensaje_err)
 
     if "resultado_lote" in st.session_state and "tarea_id" in st.session_state:
         res = st.session_state.resultado_lote
