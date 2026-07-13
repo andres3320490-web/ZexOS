@@ -34,7 +34,6 @@ SUPABASE_KEY = "sb_publishable_9RminSlrRKt7SnRPzosDbg_oN8vrprU"
 
 @st.cache_resource
 def init_supabase():
-    # Inicialización limpia y directa para resolver de raíz el AttributeError: 'bool' object has no attribute 'headers'
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase: Client = init_supabase()
@@ -154,7 +153,7 @@ with col_der:
                     status.update(label="⚠️ Servidor ocupado. Estás en fila de espera, no cierres la pestaña...", state="running")
                 
                 with 独占_lock:
-                    status.update(label="🧠 Servidor adquirido. Extrayendo ganchos narrativos...", state="running")
+                    status.update(label="🧠 Servidor adquirido. Procesando flujos y ganchos narrativos...", state="running")
                     try:
                         resultado = pipeline_procesamiento_masivo(
                             tarea_id=tarea_id, 
